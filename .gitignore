@@ -48,3 +48,6 @@ htmlcov/
 # Backup files
 *.bak
 
+
+# Local evaluation results
+evaluation/results/
