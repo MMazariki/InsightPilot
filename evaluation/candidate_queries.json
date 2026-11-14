@@ -1,0 +1,22 @@
+[
+  {
+    "id": "EVAL-001",
+    "candidate_dax": "EVALUATE ROW(\"Net Sales\", CALCULATE([Net Sales]))"
+  },
+  {
+    "id": "EVAL-002",
+    "candidate_dax": "EVALUATE SUMMARIZECOLUMNS('DimProduct'[Category], \"Gross Profit\", CALCULATE([Gross Profit]))"
+  },
+  {
+    "id": "EVAL-003",
+    "candidate_dax": "EVALUATE SUMMARIZECOLUMNS('DimStore'[Region], \"Units Sold\", CALCULATE([Units Sold]))"
+  },
+  {
+    "id": "EVAL-004",
+    "candidate_dax": "EVALUATE SUMMARIZECOLUMNS('DimDate'[YearMonth], \"Net Sales\", CALCULATE([Net Sales]))"
+  },
+  {
+    "id": "EVAL-005",
+    "candidate_dax": "EVALUATE SUMMARIZECOLUMNS('FactSales'[Channel], \"Total Discounts\", CALCULATE([Total Discounts]))"
+  }
+]
