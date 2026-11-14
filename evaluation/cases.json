@@ -1,0 +1,32 @@
+[
+  {
+    "id": "EVAL-001",
+    "question": "What are total net sales?",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": []
+  },
+  {
+    "id": "EVAL-002",
+    "question": "Show gross profit by product category.",
+    "expected_measures": ["Gross Profit"],
+    "expected_dimensions": ["DimProduct[Category]"]
+  },
+  {
+    "id": "EVAL-003",
+    "question": "Compare units sold by store region.",
+    "expected_measures": ["Units Sold"],
+    "expected_dimensions": ["DimStore[Region]"]
+  },
+  {
+    "id": "EVAL-004",
+    "question": "Show monthly net sales trends.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimDate[YearMonth]"]
+  },
+  {
+    "id": "EVAL-005",
+    "question": "Compare discounts by sales channel.",
+    "expected_measures": ["Total Discounts"],
+    "expected_dimensions": ["FactSales[Channel]"]
+  }
+]
