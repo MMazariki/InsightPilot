@@ -1,0 +1,28 @@
+{
+  "name": "powerbi_embed_component",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run clean && npm run typecheck && npm run build:frontend:production",
+    "build:frontend:production": "cross-env NODE_ENV=production vite build",
+    "clean": "rimraf build",
+    "dev": "cross-env NODE_ENV=development vite build --watch",
+    "format": "prettier --write src/**/*.ts vite.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "prettier": {},
+  "dependencies": {
+    "@azure/msal-browser": "^5.28.0",
+    "@streamlit/component-v2-lib": "^0.2.0",
+    "powerbi-client": "^2.25.0",
+    "powerbi-report-authoring": "^3.0.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.1.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10"
+  }
+}

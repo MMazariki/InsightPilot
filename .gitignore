@@ -1,0 +1,50 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.token_cache/
+.vscode/
+# Streamlit local configuration
+.streamlit/
+
+# Environment files
+.env.*
+!.env.example
+
+# Node.js dependencies and generated builds
+node_modules/
+dist/
+build/
+
+# Generated deployment packages
+deployment_wheels/
+
+# Diagnostic outputs
+fabric_iq_*.json
+
+# Logs and local databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Credentials and certificates
+*.pem
+*.pfx
+*.p12
+*.key
+
+# Python testing and tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+
+# Generated Python package metadata
+*.egg-info/
+
+# Backup files
+*.bak
+

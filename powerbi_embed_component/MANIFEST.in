@@ -1,0 +1,2 @@
+recursive-include powerbi_embed_component/frontend/build *
+include pyproject.toml

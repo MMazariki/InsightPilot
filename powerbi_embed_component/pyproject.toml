@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powerbi_embed_component"
+version = "0.0.1"
+description = "Streamlit component that allows you to do X"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Maz", email = "mmazariki@gmail.com" }]
+dependencies = ["streamlit >= 1.51"]
+
+[tool.setuptools.packages.find]
+include = ["powerbi_embed_component*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+powerbi_embed_component = ["frontend/build/**/*", "pyproject.toml"]
