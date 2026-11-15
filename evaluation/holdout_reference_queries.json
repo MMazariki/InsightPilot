@@ -1,0 +1,50 @@
+[
+  {
+    "id": "HOLD-001",
+    "reference_dax": "EVALUATE\nROW(\"Gross Sales\", [Gross Sales],\n    \"Total Discounts\", [Total Discounts])"
+  },
+  {
+    "id": "HOLD-002",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[City],\n    \"Net Sales\", [Net Sales],\n    \"Gross Profit\", [Gross Profit]\n)"
+  },
+  {
+    "id": "HOLD-003",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[CustomerSegment],\n    \"Net Sales\",\n    CALCULATE(\n        [Net Sales],\n        'FactSales'[Channel] = \"Delivery\"\n    )\n)"
+  },
+  {
+    "id": "HOLD-004",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[IsWeekend],\n    \"Net Sales\", [Net Sales]\n)"
+  },
+  {
+    "id": "HOLD-005",
+    "reference_dax": "EVALUATE\nTOPN(\n    5,\n    SUMMARIZECOLUMNS(\n        'DimProduct'[Brand],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales], DESC,\n    'DimProduct'[Brand], ASC\n)\nORDER BY [Net Sales] DESC, 'DimProduct'[Brand] ASC"
+  },
+  {
+    "id": "HOLD-006",
+    "reference_dax": "EVALUATE\nROW(\n    \"Average Net Sales per Order\",\n    DIVIDE(\n        [Net Sales],\n        DISTINCTCOUNT('FactSales'[OrderID])\n    )\n)"
+  },
+  {
+    "id": "HOLD-007",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimProduct'[Category],\n    \"Gross Margin %\", [Gross Margin %]\n)"
+  },
+  {
+    "id": "HOLD-008",
+    "reference_dax": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'FactSales'[Channel],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales] > 100000\n)"
+  },
+  {
+    "id": "HOLD-009",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[YearMonth],\n    \"Net Sales\",\n    CALCULATE(\n        [Net Sales],\n        'FactSales'[Channel] = \"In-Store\"\n    )\n)"
+  },
+  {
+    "id": "HOLD-010",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    'DimProduct'[Category],\n    \"Gross Profit\", [Gross Profit]\n)"
+  },
+  {
+    "id": "HOLD-011",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[Year],\n    'DimDate'[Quarter],\n    \"Net Sales\", [Net Sales]\n)"
+  },
+  {
+    "id": "HOLD-012",
+    "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[PaymentMethod],\n    \"Distinct Orders\",\n    DISTINCTCOUNT('FactSales'[OrderID])\n)"
+  }
+]

@@ -1,7 +1,7 @@
 from evaluation.result_comparator import compare_results
 
 
-def score_evaluation(reference_cases, candidate_cases):
+def score_evaluation(reference_cases, candidate_cases, comparator=compare_results):
     """Score candidate Power BI results against reference results."""
 
     ids = [case["id"] for case in candidate_cases]
@@ -44,7 +44,7 @@ def score_evaluation(reference_cases, candidate_cases):
             })
             continue
 
-        comparison = compare_results(reference, candidate)
+        comparison = comparator(reference, candidate)
 
         scores.append({
             "id": case_id,
@@ -70,3 +70,4 @@ def score_evaluation(reference_cases, candidate_cases):
         ),
         "cases": scores,
     }
+

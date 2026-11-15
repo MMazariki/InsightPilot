@@ -1,0 +1,74 @@
+[
+  {
+    "id": "HOLD-001",
+    "question": "What are gross sales and total discounts?",
+    "expected_measures": ["Gross Sales", "Total Discounts"],
+    "expected_dimensions": []
+  },
+  {
+    "id": "HOLD-002",
+    "question": "Show net sales and gross profit by store city.",
+    "expected_measures": ["Net Sales", "Gross Profit"],
+    "expected_dimensions": ["DimStore[City]"]
+  },
+  {
+    "id": "HOLD-003",
+    "question": "Show net sales by customer segment for delivery orders only.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimCustomer[CustomerSegment]"]
+  },
+  {
+    "id": "HOLD-004",
+    "question": "Compare net sales on weekends versus weekdays.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimDate[IsWeekend]"]
+  },
+  {
+    "id": "HOLD-005",
+    "question": "Show the top five product brands ranked by net sales.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimProduct[Brand]"]
+  },
+  {
+    "id": "HOLD-006",
+    "question": "What is the average net sales amount per distinct order?",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": []
+  },
+  {
+    "id": "HOLD-007",
+    "question": "Show gross margin percentage by product category.",
+    "expected_measures": ["Gross Margin %"],
+    "expected_dimensions": ["DimProduct[Category]"]
+  },
+  {
+    "id": "HOLD-008",
+    "question": "Which sales channels have net sales greater than SAR 100,000?",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["FactSales[Channel]"]
+  },
+  {
+    "id": "HOLD-009",
+    "question": "Show monthly net sales for In-Store transactions only.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimDate[YearMonth]"]
+  },
+  {
+    "id": "HOLD-010",
+    "question": "Show gross profit by store region and product category.",
+    "expected_measures": ["Gross Profit"],
+    "expected_dimensions": ["DimStore[Region]", "DimProduct[Category]"]
+  },
+  {
+    "id": "HOLD-011",
+    "question": "Show net sales by year and quarter.",
+    "expected_measures": ["Net Sales"],
+    "expected_dimensions": ["DimDate[Year]", "DimDate[Quarter]"]
+  },
+  {
+    "id": "HOLD-012",
+    "question": "Count distinct orders by payment method.",
+    "expected_measures": [],
+    "expected_dimensions": ["FactSales[PaymentMethod]"]
+  }
+]
