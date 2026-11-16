@@ -556,3 +556,32 @@ def test_fresh_v10_requirement_passes_all_checks(case):
                          reference_hints=True, expression_kind_hints=True)
     compile_query_plan(plan)
     assert check_requirement_coverage(plan, case["requirement"])["covered"]
+
+
+# ------------------------------------------------------------------
+# Eleventh fresh set (fresh_v11: v11 vs v12)
+# ------------------------------------------------------------------
+
+CASES_V11 = fresh.load_cases(fresh.resolve_paths("fresh_v11", "v12")["cases"])
+SUPPORTED_V11 = [case for case in CASES_V11 if case["category"] in fresh.ANSWERABLE]
+
+
+def test_fresh_v11_shape_and_independence():
+    assert len(SUPPORTED_V11) == 12
+    assert len([c for c in CASES_V11 if c["category"] == "unsupported"]) == 8
+    earlier = {case["question"].casefold() for case in
+               CASES + CASES_V2 + CASES_V3 + CASES_V4 + CASES_V5 + CASES_V6
+               + CASES_V7 + CASES_V8 + CASES_V9 + CASES_V10}
+    assert not earlier & {case["question"].casefold() for case in CASES_V11}
+
+
+@pytest.mark.parametrize("case", SUPPORTED_V11, ids=lambda case: case["id"])
+def test_fresh_v11_requirement_passes_all_checks(case):
+    from evaluation.semantic_checks import check_semantic_rules
+
+    plan = canonical_plan(case["requirement"])
+    validate_query_plan(plan)
+    check_semantic_rules(plan, reject_single_value_grouping=True,
+                         reference_hints=True, expression_kind_hints=True)
+    assert compile_query_plan(plan) == case["reference_dax"]
+    assert check_requirement_coverage(plan, case["requirement"])["covered"]
