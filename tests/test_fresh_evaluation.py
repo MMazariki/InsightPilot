@@ -295,3 +295,35 @@ def test_stages_refuse_to_overwrite(tmp_path, monkeypatch, stage, attribute):
 def test_cli_rejects_unknown_stage():
     with pytest.raises(SystemExit):
         fresh.main(["everything"])
+
+
+# ------------------------------------------------------------------
+# Second fresh set (fresh_v2)
+# ------------------------------------------------------------------
+
+CASES_V2 = fresh.load_cases(fresh.resolve_paths("fresh_v2", "v2")["cases"])
+SUPPORTED_V2 = [case for case in CASES_V2 if case["category"] in fresh.ANSWERABLE]
+
+
+def test_fresh_v2_shape_and_independence():
+    assert len(SUPPORTED_V2) == 12
+    unsupported = [case for case in CASES_V2 if case["category"] == "unsupported"]
+    assert len(unsupported) == 10
+    reasons = json.loads((fresh.EVAL / "clarification_schema.json").read_text(
+        encoding="utf-8-sig"))["properties"]["clarification"]["properties"][
+        "reason"]["enum"]
+    for case in unsupported:
+        assert case["requirement"] == {"supported": False}
+        assert case["expected_reason"] in reasons
+        assert "reference_dax" not in case
+    earlier = {case["question"].casefold() for case in CASES}
+    assert not earlier & {case["question"].casefold() for case in CASES_V2}
+
+
+@pytest.mark.parametrize("case", SUPPORTED_V2, ids=lambda case: case["id"])
+def test_fresh_v2_requirement_validates_and_compiles(case):
+    assert case["reference_dax"].lstrip().startswith("EVALUATE")
+    plan = canonical_plan(case["requirement"])
+    validate_query_plan(plan)
+    compile_query_plan(plan)
+    assert check_requirement_coverage(plan, case["requirement"])["covered"]
