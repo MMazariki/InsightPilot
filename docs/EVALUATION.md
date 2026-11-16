@@ -43,7 +43,8 @@ for scoring; it is not yet wired into the live app.
 | v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure) |
 | v8 | + decline path appended to the column-as-measure hint (rejected: regressed on fresh_v8) |
 | v9 | v7 + answerability gate: out-of-vocabulary question words trigger a verifier that checks the plan answers the question |
-| v10 | v9 + drop metrics that merely echo a grouping column (semantics-preserving normalisation); **used by the Streamlit app** |
+| v10 | v9 + drop metrics that merely echo a grouping column (semantics-preserving normalisation) |
+| v11 | v10 + the gate's verifier also runs when the question names no metric (prompt and parsing identical to v10); **used by the Streamlit app** |
 
 ## 2. Method
 
@@ -102,6 +103,8 @@ an unbiased estimate.
 | | v8 | 8 / 8 | 10 / 10 | 6 | 5 | 4 / 1 |
 | fresh_v9 (12 + 8) | v7 | 5 / 5 | 12 / 11 | 7 | 5 | 7 / 0 |
 | | **v9** | 4 / 4 | 12 / 11 | 8 | **7** | 8 / 0 |
+| fresh_v10 (12 + 8) | v10 | 5 / 5 | 8 / 7 | 5 | 3 | 6 / 0 |
+| | **v11** | 5 / 5 | 8 / 7 | **6** | **5** | 6 / 0 |
 
 Set sizes are (answerable incl. one empty-result case + unsupported).
 fresh_v7: FRESH7-012 unexpectedly returns no rows (no month exceeds the
@@ -161,6 +164,27 @@ negative (both metrics renamed; values verified identical).
   all 841 saved model outputs from fresh_v1-v9 re-parsed under v9 and v10
   gave 4 invalid → valid (all 7B; all fully covered their requirement
   specs) and 0 other changes. No accuracy gain is claimed beyond that.
+* **No-metric gate trigger (v11).** v9's trigger only fires on
+  out-of-vocabulary words, so vague requests written entirely in model
+  vocabulary ("Show the breakdown") reached execution. v11 also runs the
+  verifier when the question names no metric. On unseen fresh_v10 (terse
+  answerable questions that name their metric; vague unsupported ones that
+  do not), every answerable case had the same outcome under both arms and
+  the new trigger fired on none of them. Unsupported declined: 7B 3 → 5
+  ("What were the results for Q3?", "Show everything by month."), 3B
+  5 → 6 ("Show the breakdown."). Three vague questions are still answered
+  by both models under v11 ("Compare the store types.", "Show the figures
+  by channel.", "Rank the regions."): the trigger's metric-word list
+  contains countable entity words (store, channel, region), so it did not
+  fire. The app (7B) adopted v11.
+* **Terse questions (fresh_v10, both arms).** Independent of the gate, 7B
+  answerable accuracy fell to 8/12 execution, 7 strict (12/12, 11 on
+  fresh_v9): wrong metric for "How many orders per channel?" and "Gross
+  profit per order by payment method.", wrong grouping/filter for "Gross
+  sales for Riyadh stores by month." and "Units sold on weekends by
+  channel.", and a same-table customer count for "Customers per segment
+  who bought something." 3B over-refused 6 of 12. These are planner
+  errors that no current check catches.
 
 ## 4. Known limitations
 
@@ -183,6 +207,12 @@ negative (both metrics renamed; values verified identical).
   entirely in model vocabulary (e.g. "Show me the totals") still bypass it.
 * **Verifier is a model judgement** (same local model, one extra call when
   triggered); 3B produced a false block on fresh_v9.
+* **Vague requests that mention an entity** ("Rank the regions") still
+  pass the v11 trigger and are answered with a guessed metric (3 of 8 on
+  fresh_v10, both models). Narrowing the metric-word list is untested and
+  would need a new fresh set.
+* **Terse phrasing** lowered 7B answerable accuracy on fresh_v10 to 7/12
+  strict; wrong-metric and wrong-grouping plans executed without warning.
 * **Diminishing returns.** v7 and v8 produced no measured gain; further
   gains likely need real user questions rather than author-written sets.
 * **Rule gaps (by design).** Rule 2 allows same-table dimension distinct
@@ -197,7 +227,7 @@ negative (both metrics renamed; values verified identical).
   freshness, ties beyond deterministic tie-breakers, multi-turn context,
   `IN`-style multi-value filters (not expressible in the plan schema).
 * **App integration is opt-in.** `INSIGHTPILOT_AGENT=structured` runs
-  pipeline v10 in the Streamlit app (`src/structured_agent.py`, local
+  pipeline v11 in the Streamlit app (`src/structured_agent.py`, local
   `qwen2.5-coder:7b`); the default remains the original Foundry agent.
   Requirement coverage is not applied live (it needs a requirement spec).
 
@@ -216,7 +246,8 @@ negative (both metrics renamed; values verified identical).
 | `b01145b` → `ed45eeb` | v7 → fresh_v7 set |
 | `0179ad4` → `fee3de4` | v8 → fresh_v8 set (v8 rejected) |
 | `5db2a26` → `b89ea7f` | v9 → fresh_v9 set (app switched to v9) |
-| (this commit) | v10 normalisation, offline replay, app switched to v10 |
+| `f831ee9` | v10 normalisation, offline replay, app switched to v10 |
+| `0a9d34b` → `facba4f` | v11 → fresh_v10 set (app switched to v11) |
 
 ## 6. Reproducing
 

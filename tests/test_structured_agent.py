@@ -199,6 +199,22 @@ def test_gate_not_called_for_in_vocabulary_question():
     assert calls["chat"] == []
 
 
+def test_gate_blocks_question_that_names_no_metric():
+    # Pipeline v11: every word is in the vocabulary, but no metric is named.
+    powerbi = FakePowerBI()
+    verdict = json.dumps({"faithful": False, "reason": "No metric named."})
+    agent, calls = make_agent([json.dumps(PLAN)], powerbi,
+                              chat_responses=[verdict])
+    answer = agent.ask("Show the breakdown.")
+    assert powerbi.queries == []
+    assert "Which metric do you mean" in answer
+    assert agent.last_trace["answerability"] == {
+        "unknown_terms": [], "no_metric_reference": True,
+        "reason": "No metric named."}
+    assert "Note: The question does not name any metric" in (
+        calls["chat"][0][1]["content"])
+
+
 def test_agent_accepts_grouped_column_echo_without_repair():
     # Live v9 failure: "Show gross profit by sales channel".
     plan = {

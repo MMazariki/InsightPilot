@@ -1,4 +1,4 @@
-"""Structured-planning BI agent (pipeline v10) for the Streamlit app.
+"""Structured-planning BI agent (pipeline v11) for the Streamlit app.
 
 Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request``
 / ``close`` interface) that runs locally and never executes model-written DAX:
@@ -7,7 +7,8 @@ Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request
     -> normalisation (grouped-column echoes, aliases) + semantic checks
        + schema/model validation
     -> at most one repair turn with the rejection message
-    -> answerability gate (verifier only for out-of-vocabulary wording)
+    -> answerability gate (verifier only for out-of-vocabulary wording or
+       questions that name no metric)
     -> deterministic DAX compiler -> read-only Power BI ExecuteQueries
 
 Selected in ``src/main.py`` with ``INSIGHTPILOT_AGENT=structured``. The model
@@ -35,7 +36,7 @@ from evaluation.run_fresh_evaluation import REPAIR_INSTRUCTION_V6
 
 LOGGER = logging.getLogger("insightpilot.structured_agent")
 
-PIPELINE_VERSION = "v10"
+PIPELINE_VERSION = "v11"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 MAX_TABLE_ROWS = 50
 
@@ -138,12 +139,15 @@ class StructuredPlanningAgent:
             response = self._parse(repaired)
 
         if response["kind"] == "plan":
-            result = gate(question, response["plan"], self.chat, self.model)
-            if result["unknown_terms"]:
+            result = gate(question, response["plan"], self.chat, self.model,
+                          require_metric_reference=True)
+            if result["verdict"] is not None:
                 trace["stages"].append(
                     "answerability:" + ("pass" if result["passed"] else "blocked"))
                 trace["answerability"] = {
                     "unknown_terms": result["unknown_terms"],
+                    "no_metric_reference": result.get(
+                        "no_metric_reference", False),
                     "reason": (result["verdict"] or {}).get("reason"),
                 }
             if not result["passed"]:
