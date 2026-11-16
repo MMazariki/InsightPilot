@@ -327,3 +327,31 @@ def test_fresh_v2_requirement_validates_and_compiles(case):
     validate_query_plan(plan)
     compile_query_plan(plan)
     assert check_requirement_coverage(plan, case["requirement"])["covered"]
+
+
+# ------------------------------------------------------------------
+# Third fresh set (fresh_v3)
+# ------------------------------------------------------------------
+
+CASES_V3 = fresh.load_cases(fresh.resolve_paths("fresh_v3", "v3")["cases"])
+SUPPORTED_V3 = [case for case in CASES_V3 if case["category"] in fresh.ANSWERABLE]
+
+
+def test_fresh_v3_shape_and_independence():
+    assert len(SUPPORTED_V3) == 16
+    unsupported = [case for case in CASES_V3 if case["category"] == "unsupported"]
+    assert len(unsupported) == 6
+    for case in unsupported:
+        assert case["requirement"] == {"supported": False}
+        assert "reference_dax" not in case
+    earlier = {case["question"].casefold() for case in CASES + CASES_V2}
+    assert not earlier & {case["question"].casefold() for case in CASES_V3}
+
+
+@pytest.mark.parametrize("case", SUPPORTED_V3, ids=lambda case: case["id"])
+def test_fresh_v3_requirement_validates_and_compiles(case):
+    assert case["reference_dax"].lstrip().startswith("EVALUATE")
+    plan = canonical_plan(case["requirement"])
+    validate_query_plan(plan)
+    compile_query_plan(plan)
+    assert check_requirement_coverage(plan, case["requirement"])["covered"]
