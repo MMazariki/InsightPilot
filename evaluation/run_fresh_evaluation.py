@@ -35,7 +35,10 @@ from pathlib import Path
 
 import requests
 
-from evaluation.alias_aware_comparator import compare_results_with_metric_alias
+from evaluation.alias_aware_comparator import (
+    compare_results_with_metric_alias,
+    compare_results_with_metric_aliases,
+)
 from evaluation.ordered_comparator import compare_results_ordered
 from evaluation.planner_response import parse_planner_response
 from evaluation.query_plan_compiler import compile_query_plan
@@ -57,8 +60,27 @@ MAX_ATTEMPTS = 3        # infrastructure failures only
 RETRY_DELAY_SECONDS = 10
 ANSWERABLE = ("answerable", "empty_result")
 DECLINED_STATUSES = ("clarification", "blocked_by_guard")
-SETS = {"fresh_v1": "fresh_cases_v1.json", "fresh_v2": "fresh_cases_v2.json"}
-PROMPTS = ("v1", "v2")
+SETS = {
+    "fresh_v1": "fresh_cases_v1.json",
+    "fresh_v2": "fresh_cases_v2.json",
+    "fresh_v3": "fresh_cases_v3.json",
+}
+PROMPTS = ("v1", "v2", "v3")
+
+# Comparator per case set is fixed so every arm on a set is scored by the same
+# rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
+# sets tolerate several renamed metrics (values remain strict).
+MULTI_ALIAS_SETS = {"fresh_v3"}
+
+
+def comparators_for(set_name):
+    base = (compare_results_with_metric_aliases if set_name in MULTI_ALIAS_SETS
+            else compare_results_with_metric_alias)
+
+    def ordered(expected, actual):
+        return compare_results_ordered(expected, actual, base_comparator=base)
+
+    return base, ordered
 
 
 def resolve_paths(set_name="fresh_v1", prompt="v1"):
@@ -85,7 +107,7 @@ def resolve_paths(set_name="fresh_v1", prompt="v1"):
         report = RESULTS / f"{set_name}_prompt_{prompt}_evaluation.json"
 
     return {"cases": cases, "references": references,
-            "plans": plans, "report": report}
+            "plans": plans, "report": report, "set": set_name}
 
 
 def load_json(path):
@@ -268,7 +290,7 @@ def generate_plans(paths, prompt="v1"):
 # Stage 3: execution and scoring
 # ----------------------------------------------------------------------
 
-def evaluate_case(case, record, reference, execute):
+def evaluate_case(case, record, reference, execute, set_name="fresh_v1"):
     """Score one model output for one case. ``execute`` maps DAX -> result."""
 
     requirement = case["requirement"]
@@ -325,14 +347,15 @@ def evaluate_case(case, record, reference, execute):
         return result
 
     candidate = {"columns": executed["columns"], "rows": executed["rows"]}
-    comparator = (compare_results_ordered if requirement.get("order_by")
-                  else compare_results_with_metric_alias)
+    unordered, ordered = comparators_for(set_name)
+    comparator = ordered if requirement.get("order_by") else unordered
     comparison = comparator(reference, candidate)
 
     result.update(
         candidate_dax=dax,
         row_count=executed["row_count"],
         columns=executed["columns"],
+        rows=executed["rows"],
         passed=comparison["passed"],
         reason=comparison["reason"],
         outcome="evaluated",
@@ -385,7 +408,8 @@ def evaluate(paths):
                 print(f"{model} | {case['id']}", flush=True)
                 item = evaluate_case(case, records.get((model, case["id"])),
                                      references.get(case["id"]),
-                                     service.execute_dax)
+                                     service.execute_dax,
+                                     paths.get("set", "fresh_v1"))
                 results.append(item)
                 flag = "PASS" if item["passed"] else "FAIL"
                 strict = "" if item["strict_passed"] == item["passed"] else \
@@ -419,6 +443,7 @@ def evaluate(paths):
         "prompt_version": plans_payload.get("prompt_version", "v1"),
         "request_guard": plans_payload.get("request_guard", False),
         "prompt_sha256": plans_payload.get("prompt_sha256"),
+        "comparator": comparators_for(paths.get("set", "fresh_v1"))[0].__name__,
         "models": per_model,
     })
 

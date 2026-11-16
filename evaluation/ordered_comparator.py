@@ -24,14 +24,19 @@ def _equivalent(a, b, relative_tolerance, absolute_tolerance):
 
 
 def compare_results_ordered(expected, actual, relative_tolerance=1e-6,
-                            absolute_tolerance=0.01):
-    """Alias-aware comparison that also requires identical row order."""
+                            absolute_tolerance=0.01,
+                            base_comparator=compare_results_with_metric_alias):
+    """Alias-aware comparison that also requires identical row order.
+
+    ``base_comparator`` defaults to the single-alias comparator used for the
+    fresh_v1 and fresh_v2 reports.
+    """
 
     tolerances = {
         "relative_tolerance": relative_tolerance,
         "absolute_tolerance": absolute_tolerance,
     }
-    result = compare_results_with_metric_alias(expected, actual, **tolerances)
+    result = base_comparator(expected, actual, **tolerances)
 
     if not result["passed"]:
         return result

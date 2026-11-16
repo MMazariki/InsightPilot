@@ -58,3 +58,65 @@ def compare_results_with_metric_alias(expected, actual, **tolerances):
         }
 
     return result
+
+
+MAX_RENAMED_METRICS = 4
+
+
+def compare_results_with_metric_aliases(expected, actual, **tolerances):
+    """Allow any number (<= 4) of renamed metrics; values stay strict.
+
+    Generalises ``compare_results_with_metric_alias`` (kept unchanged for
+    previously scored reports). Only unqualified metric columns ``[Name]``
+    may be renamed; dimension columns ``Table[Column]`` must match exactly.
+    Every bijection between missing and extra metric columns is tried, and
+    the first one under which all values match is accepted.
+    """
+
+    from itertools import permutations
+
+    strict = compare_results(expected, actual, **tolerances)
+
+    if strict["reason"] != "Column mismatch":
+        return strict
+
+    missing = sorted(set(expected["columns"]) - set(actual["columns"]))
+    extra = sorted(set(actual["columns"]) - set(expected["columns"]))
+
+    if not missing or len(missing) != len(extra):
+        return strict
+
+    if len(missing) > MAX_RENAMED_METRICS:
+        return strict
+
+    metric_pattern = r"\[[^\[\]]+\]"
+
+    if not all(re.fullmatch(metric_pattern, name) for name in missing + extra):
+        return strict
+
+    for ordering in permutations(extra):
+        mapping = dict(zip(ordering, missing))
+        remapped = {
+            "columns": [mapping.get(col, col) for col in actual["columns"]],
+            "rows": [
+                {mapping.get(key, key): value for key, value in row.items()}
+                for row in actual["rows"]
+            ],
+        }
+        result = compare_results(expected, remapped, **tolerances)
+
+        if result["passed"]:
+            result["reason"] = (
+                "Results equivalent (metric alias differs)"
+                if len(mapping) == 1
+                else f"Results equivalent ({len(mapping)} metric aliases differ)"
+            )
+            result["alias_mapping"] = mapping
+            return result
+
+    first = dict(zip(extra, missing))
+    return compare_results(expected, {
+        "columns": [first.get(col, col) for col in actual["columns"]],
+        "rows": [{first.get(k, k): v for k, v in row.items()}
+                 for row in actual["rows"]],
+    }, **tolerances)

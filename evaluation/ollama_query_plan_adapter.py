@@ -65,6 +65,7 @@ def generate_plan(model, question, instructions):
 PROMPT_FILES = {
     "v1": "query_plan_prompt_v1.txt",
     "v2": "query_plan_prompt_v2.txt",
+    "v3": "query_plan_prompt_v3.txt",
 }
 
 
