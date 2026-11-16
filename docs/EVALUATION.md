@@ -45,6 +45,7 @@ for scoring; it is not yet wired into the live app.
 | v9 | v7 + answerability gate: out-of-vocabulary question words trigger a verifier that checks the plan answers the question |
 | v10 | v9 + drop metrics that merely echo a grouping column (semantics-preserving normalisation) |
 | v11 | v10 + the gate's verifier also runs when the question names no metric (prompt and parsing identical to v10); **used by the Streamlit app** |
+| v12 | v11 with a narrower metric-word list: grouping entities (store, channel, region, ...) no longer count as naming a metric (rejected: over-refused answerable questions on fresh_v11) |
 
 ## 2. Method
 
@@ -105,6 +106,8 @@ an unbiased estimate.
 | | **v9** | 4 / 4 | 12 / 11 | 8 | **7** | 8 / 0 |
 | fresh_v10 (12 + 8) | v10 | 5 / 5 | 8 / 7 | 5 | 3 | 6 / 0 |
 | | **v11** | 5 / 5 | 8 / 7 | **6** | **5** | 6 / 0 |
+| fresh_v11 (12 + 8) | **v11** | 8 / 8 | 10 / 8 | 5 | 0 | 2 / 1 |
+| | v12 | 7 / 7 | 8 / 6 | 7 | 6 | 4 / 3 |
 
 Set sizes are (answerable incl. one empty-result case + unsupported).
 fresh_v7: FRESH7-012 unexpectedly returns no rows (no month exceeds the
@@ -185,6 +188,30 @@ negative (both metrics renamed; values verified identical).
   channel.", and a same-table customer count for "Customers per segment
   who bought something." 3B over-refused 6 of 12. These are planner
   errors that no current check catches.
+* **Narrower metric-word list (v12, rejected).** v12 removes grouping
+  entities from the trigger's metric words so that "Rank the regions."
+  reaches the verifier. On unseen fresh_v11 (prompt and parsing identical
+  in both arms) it did
+  what it was built for: 7B unsupported declined 0 → 6 of 8, 3B 5 → 7.
+  But it also blocked two answerable questions on both models, "Distinct
+  stores per channel." and "Distinct store cities in each region.":
+  neither contains a quantity word or one of the counting phrases ("how
+  many", "number of", "count"), so the trigger fired and the verifier
+  rejected plans that were correct (7B passed both under v11; 3B passed
+  one). 7B answerable fell 10 / 8 → 8 / 6 and over-refusals rose 1 → 3.
+  The adoption rule fixed before the run was "more declines at no cost to
+  answerable questions", so v12 is rejected and the app stays on v11.
+  Two vague questions are still answered by 7B under v12: "Show the
+  figures for each customer segment." ("customer" remains a quantity
+  word; noted before the run) and "Sort the subcategories from highest
+  to lowest." (trigger fired, verifier output was not valid JSON, and
+  the gate passes on unusable verifier output).
+* **fresh_v11, both arms.** "How many stores sold something in each
+  region?" was over-refused by both models under both arms ("something"
+  is out-of-vocabulary; the verifier rejected the plan). 7B produced an
+  invalid plan for "Compare the regions on units sold per order." Under
+  v11, 7B answered all 8 vague unsupported questions with a guessed
+  metric.
 
 ## 4. Known limitations
 
@@ -209,8 +236,16 @@ negative (both metrics renamed; values verified identical).
   triggered); 3B produced a false block on fresh_v9.
 * **Vague requests that mention an entity** ("Rank the regions") still
   pass the v11 trigger and are answered with a guessed metric (3 of 8 on
-  fresh_v10, both models). Narrowing the metric-word list is untested and
-  would need a new fresh set.
+  fresh_v10; 8 of 8 for 7B on fresh_v11). Narrowing the metric-word list
+  (v12) catches 6 of those 8 but over-refuses "Distinct <entity> per
+  <group>" questions, so it was not adopted. Treating "distinct" as a
+  counting phrase is the obvious follow-up; it is untested and would need
+  a new fresh set.
+* **Gate fails open.** When the verifier's output cannot be parsed, the
+  plan is executed (one unsupported question on fresh_v11, 7B v12).
+* **Verifier false blocks on correct plans** occurred on fresh_v11 for
+  every answerable question the trigger fired on (1 under v11, 3 under
+  v12, both models), so widening the trigger has a direct cost.
 * **Terse phrasing** lowered 7B answerable accuracy on fresh_v10 to 7/12
   strict; wrong-metric and wrong-grouping plans executed without warning.
 * **Diminishing returns.** v7 and v8 produced no measured gain; further
@@ -248,6 +283,7 @@ negative (both metrics renamed; values verified identical).
 | `5db2a26` → `b89ea7f` | v9 → fresh_v9 set (app switched to v9) |
 | `f831ee9` | v10 normalisation, offline replay, app switched to v10 |
 | `0a9d34b` → `facba4f` | v11 → fresh_v10 set (app switched to v11) |
+| `d467725` → `e563fd5` | v12 → fresh_v11 set (v12 rejected, app stays on v11) |
 
 ## 6. Reproducing
 
