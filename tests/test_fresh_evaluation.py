@@ -411,3 +411,31 @@ def test_fresh_v5_requirement_passes_all_v5_checks(case):
     check_semantic_rules(plan, reject_single_value_grouping=True)
     compile_query_plan(plan)
     assert check_requirement_coverage(plan, case["requirement"])["covered"]
+
+
+# ------------------------------------------------------------------
+# Sixth fresh set (fresh_v6)
+# ------------------------------------------------------------------
+
+CASES_V6 = fresh.load_cases(fresh.resolve_paths("fresh_v6", "v6")["cases"])
+SUPPORTED_V6 = [case for case in CASES_V6 if case["category"] in fresh.ANSWERABLE]
+
+
+def test_fresh_v6_shape_and_independence():
+    assert len(SUPPORTED_V6) == 14
+    assert len([c for c in CASES_V6 if c["category"] == "unsupported"]) == 6
+    earlier = {case["question"].casefold()
+               for case in CASES + CASES_V2 + CASES_V3 + CASES_V4 + CASES_V5}
+    assert not earlier & {case["question"].casefold() for case in CASES_V6}
+
+
+@pytest.mark.parametrize("case", SUPPORTED_V6, ids=lambda case: case["id"])
+def test_fresh_v6_requirement_passes_all_v6_checks(case):
+    from evaluation.semantic_checks import check_semantic_rules
+
+    plan = canonical_plan(case["requirement"])
+    validate_query_plan(plan)
+    check_semantic_rules(plan, reject_single_value_grouping=True,
+                         reference_hints=True)
+    compile_query_plan(plan)
+    assert check_requirement_coverage(plan, case["requirement"])["covered"]
