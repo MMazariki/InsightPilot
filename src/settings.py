@@ -105,6 +105,7 @@ DEFAULTS = {
         ],
         "chat_height": 735,
         "show_query_details": True,
+        "create_charts": True,
     },
     "voice": {
         "autosend": False,
@@ -274,6 +275,8 @@ def validate(raw):
     clean["interface"]["chat_height"] = 735 if height is None else height
     clean["interface"]["show_query_details"] = bool(
         interface.get("show_query_details", True))
+    clean["interface"]["create_charts"] = bool(
+        interface.get("create_charts", True))
 
     voice = raw.get("voice") if isinstance(raw.get("voice"), dict) else {}
     clean["voice"]["autosend"] = bool(voice.get("autosend", False))

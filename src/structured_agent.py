@@ -87,6 +87,9 @@ DEFAULT_OPTIONS = {
     "strict_metric_words": False,
     "verifier_fail_closed": False,
     "max_table_rows": MAX_TABLE_ROWS,
+    # Add a chart of the answer to the embedded report (off unless the app
+    # asks for it; the query path is identical either way).
+    "create_visuals": False,
 }
 
 
@@ -117,7 +120,8 @@ class StructuredPlanningAgent:
         self.verifier_chat = verifier_chat or self.chat
         self.verifier_model = verifier_model or self.model
         self.instructions = build_instructions(PIPELINE_VERSION)
-        # This agent never authors visuals; the embedded report is untouched.
+        # Set after a successful answer when options["create_visuals"] is on
+        # and a chart fits the plan (src/visual_builder.py).
         self.pending_visual_request: dict[str, Any] | None = None
         self.last_trace: dict[str, Any] | None = None
 
@@ -246,9 +250,24 @@ class StructuredPlanningAgent:
         LOGGER.info("[%s] executed, %d rows", trace["trace_id"],
                     result["row_count"])
 
+        chart_note = None
+        if self.options["create_visuals"] and result["row_count"] > 0:
+            from src.visual_builder import REASON_FILTERED, build_visual_request
+
+            request, reason = build_visual_request(plan)
+            if request is not None:
+                self.pending_visual_request = request
+                trace["stages"].append("chart")
+                chart_note = ("_A chart of this answer was added to the Power "
+                              "BI report (sign in on the right to see it)._")
+            elif reason == REASON_FILTERED:
+                chart_note = f"_No chart was added: {reason}._"
+            trace["chart"] = "created" if request is not None else reason
+
         return "\n\n".join([
             format_result_table(result["columns"], result["rows"],
-                                self.options["max_table_rows"]),
+                                self.options["max_table_rows"])
+            + (f"\n\n{chart_note}" if chart_note else ""),
             "**Query plan and DAX**\n\n"
             f"```json\n{json.dumps(plan, indent=2)}\n```\n\n"
             f"```dax\n{dax}\n```",

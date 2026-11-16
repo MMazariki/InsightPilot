@@ -77,7 +77,7 @@ with auto-send; silence showing a warning and sending nothing.
 
 * Run tests with `.venv\Scripts\python.exe -m pytest tests -q`. Do **not**
   use `pytest.exe` directly (imports fail). Baseline before this work:
-  **591 passed**.
+  **613 passed**.
 * Do not edit anything under `evaluation/`, and never commit
   `evaluation/results/`.
 * Do not edit `src/structured_agent.py`, `src/powerbi_agent.py`,
@@ -115,7 +115,7 @@ git status --short
 ```
 
 Expected: only `?? INSIGHTPILOT_CLAUDE_HANDOFF.md` in git status, and
-`591 passed`. If tests fail before you change anything, stop and report.
+`613 passed`. If tests fail before you change anything, stop and report.
 
 ### Step 2. Install the speech package
 
@@ -198,7 +198,7 @@ must match. Afterwards `models\ggml-base.en.bin` exists.
 .venv\Scripts\python.exe -m pytest tests -q
 ```
 
-Expected: **611 passed** (591 + 20 new).
+Expected: **633 passed** (613 + 20 new).
 
 ### Step 8. Restart the app
 
@@ -246,7 +246,7 @@ this plan in the repository; they are already committed.
 
 ## 5. Definition of done
 
-* [ ] `611 passed`.
+* [ ] `633 passed`.
 * [ ] Step 6 printed the expected sentence.
 * [ ] The app restarted and `logs\app.err.log` has no traceback.
 * [ ] Changes committed and pushed; `git status --short` shows only the

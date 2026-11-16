@@ -34,7 +34,11 @@ def test_defaults_are_valid_and_match_measured_configuration():
 def test_pipeline_defaults_match_the_agent():
     from src.structured_agent import DEFAULT_OPTIONS
 
-    assert app_settings.DEFAULTS["pipeline"] == DEFAULT_OPTIONS
+    # create_visuals is an interface setting ("create_charts"), not a check.
+    agent_checks = {k: v for k, v in DEFAULT_OPTIONS.items()
+                    if k != "create_visuals"}
+    assert app_settings.DEFAULTS["pipeline"] == agent_checks
+    assert DEFAULT_OPTIONS["create_visuals"] is False
 
 
 def test_missing_and_unknown_keys_fall_back_to_defaults():

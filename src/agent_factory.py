@@ -32,7 +32,9 @@ def structured_agent_kwargs(settings, secrets=None, powerbi=None):
         "powerbi": powerbi,
         "generate": generate,
         "chat": chat,
-        "options": dict(settings["pipeline"]),
+        "options": dict(
+            settings["pipeline"],
+            create_visuals=settings["interface"]["create_charts"]),
         "verifier_chat": verifier_chat,
         "verifier_model": verifier["model"],
     }

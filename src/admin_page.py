@@ -426,6 +426,13 @@ def render(agent_mode_in_use, voice_installed):
                 'Show "How this was answered" under each answer',
                 value=i["show_query_details"], key=_key("show_query_details"),
                 help="The query plan and the DAX that was run.")
+        create_charts = st.checkbox(
+            "Add a chart of each answer to the Power BI report",
+            value=i["create_charts"], key=_key("create_charts"),
+            help="Built from the checked query plan, no model involved. A "
+                 "chart is added when the answer has one breakdown, uses "
+                 "model measures and is not filtered or limited. You must be "
+                 "signed in to the report on the right to see it.")
 
     # ----------------------------------------------------------- Voice
     with tabs[4]:
@@ -486,6 +493,7 @@ def render(agent_mode_in_use, voice_installed):
             "starter_questions": starters.splitlines(),
             "chat_height": chat_height,
             "show_query_details": show_details,
+            "create_charts": create_charts,
         },
         "voice": {"autosend": voice_autosend, "model": voice_model},
     }

@@ -18,6 +18,16 @@ background while you are signed in to Windows.
 The app address is <http://localhost:8501>. It is reachable from this
 computer only.
 
+## Charts in the Power BI report
+
+When you are signed in to the report on the right, each answer that can be
+charted is also added to the report as a chart (column, bar, line, or a
+column-and-line combination for two measures). The chart is built from the
+checked query plan, not by a model. No chart is added when the answer has no
+single breakdown, uses a computed metric such as a distinct count, or is
+filtered or limited (the chart could not apply the filter and would show
+different numbers); the answer says so in that last case.
+
 ## Admin settings
 
 The gear button next to "New chat" (or <http://localhost:8501/?view=admin>)
@@ -29,7 +39,7 @@ is needed.
 | **Models** | Which assistant answers; the planner model and, separately, the verifier model. Each can be a local Ollama model, any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, LM Studio ...) or Anthropic Claude. Per model: name, service address, API key, timeout, output-token limit, temperature, top-p, seed, context window and keep-loaded time (Ollama), JSON mode, token-limit parameter and reasoning effort (OpenAI-compatible), effort and refusal fallback (Claude). A Test button sends one tiny request. |
 | **Answer checks** | Refuse data-changing requests, the one-time repair turn, the answerability check and its two triggers, what happens when the verifier's reply is unusable, rows shown per answer. |
 | **Power BI** | Dataset, workspace, sign-in account, the report and page shown on the right, timeout. |
-| **Interface** | Starter questions, chat panel height, whether the query plan and DAX are shown. |
+| **Interface** | Starter questions, chat panel height, whether the query plan and DAX are shown, whether a chart of each answer is added to the Power BI report. |
 | **Voice** | Auto-send and speech model (used once voice input is installed). |
 
 Things to know:
