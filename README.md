@@ -28,6 +28,16 @@ single breakdown, uses a computed metric such as a distinct count, or is
 filtered or limited (the chart could not apply the filter and would show
 different numbers); the answer says so in that last case.
 
+## The data
+
+The Power BI dataset is imported from CSV files in
+`L:\Downloads\Saudi_Retail_MVP_PowerBI_Dataset` (synthetic Saudi retail
+data). `scripts/extend_sales_data.py` appended generated 2026 data to them
+on 2026-11-16; the originals are in the sibling folder ending
+`_backup_2025_only`. Changes to the CSV files reach the app only after the
+dataset is refreshed: open the report's `.pbix` in Power BI Desktop, choose
+Refresh, then Publish to the same workspace.
+
 ## Admin settings
 
 The gear button next to "New chat" (or <http://localhost:8501/?view=admin>)

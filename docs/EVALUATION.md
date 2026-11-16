@@ -215,6 +215,18 @@ negative (both metrics renamed; values verified identical).
 
 ## 4. Known limitations
 
+* **The dataset changed after these measurements.** Every result in this
+  document was measured on the original source data (1 Jan - 31 Dec 2025,
+  24,000 sales lines). On 2026-11-16 the source CSV files were extended
+  with generated 2026 data (27,143 lines for 1 Jan - 16 Nov 2026, plus
+  2026 dates and targets) by `scripts/extend_sales_data.py`; no 2025 row
+  was changed. Once the Power BI dataset is refreshed from those files,
+  questions without a year filter return different numbers, so the saved
+  reference results can no longer be re-captured, and a re-run of any
+  evaluation would need new references. Plan validity is unaffected
+  (no table, column, measure or catalogued value changed). The planner
+  has never been measured on questions that span two years.
+
 * **Small samples, single runs.** 12–16 answerable cases per set, temperature
   0, one run per arm; one case ≈ 6–8 percentage points.
 * **Author-written sets.** Questions, specs and references were written by
