@@ -161,3 +161,39 @@ def test_main_selects_agent_by_environment(monkeypatch, mode, expected):
     assert expected in names
     assert 'os.environ.get("INSIGHTPILOT_AGENT", "foundry")' in source
     assert "powerbi_embed_component(" in source
+
+
+# ------------------------------------------------------------------
+# Answerability gate (pipeline v9)
+# ------------------------------------------------------------------
+
+def test_gate_blocks_unfaithful_plan_without_execution():
+    powerbi = FakePowerBI()
+    verdict = json.dumps({"faithful": False, "reason": "no forecasting"})
+    agent, calls = make_agent([json.dumps(PLAN)], powerbi,
+                              chat_responses=[verdict])
+    answer = agent.ask("Forecast net sales by store region.")
+    assert powerbi.queries == []
+    assert "can't answer this faithfully" in answer
+    assert "forecast" in answer
+    assert "No query was executed" in answer
+    assert agent.last_trace["stages"][-2:] == [
+        "answerability:blocked", "clarification:undefined_metric"]
+    assert calls["chat"][0][0]["content"].startswith("You check whether")
+
+
+def test_gate_passes_faithful_plan_with_unknown_word():
+    powerbi = FakePowerBI()
+    verdict = json.dumps({"faithful": True, "reason": "same metric"})
+    agent, _ = make_agent([json.dumps(PLAN)], powerbi, chat_responses=[verdict])
+    agent.ask("Give a rundown of net sales by store region.")
+    assert len(powerbi.queries) == 1
+    assert agent.last_trace["stages"] == [
+        "planner", "answerability:pass", "compiled", "executed"]
+    assert agent.last_trace["answerability"]["unknown_terms"] == ["rundown"]
+
+
+def test_gate_not_called_for_in_vocabulary_question():
+    agent, calls = make_agent([json.dumps(PLAN)])
+    agent.ask("Show net sales by store region.")
+    assert calls["chat"] == []

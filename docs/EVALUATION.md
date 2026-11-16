@@ -40,8 +40,9 @@ for scoring; it is not yet wired into the live app.
 | v4 | + value catalog in prompt, semantic rules 1–2, one repair turn |
 | v5 | + semantic rule 3 (prompt text identical to v4) |
 | v6 | + rule 0 fix-it hints, repair wording that discourages declining fixable mistakes, alias normalisation (prompt text identical to v4) |
-| v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure); **used by the Streamlit app** |
+| v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure) |
 | v8 | + decline path appended to the column-as-measure hint (rejected: regressed on fresh_v8) |
+| v9 | v7 + answerability gate: out-of-vocabulary question words trigger a verifier that checks the plan answers the question; **used by the Streamlit app** |
 
 ## 2. Method
 
@@ -98,6 +99,8 @@ an unbiased estimate.
 | | **v7** | 12 / 11 | 10 / 9 | 5 | 4 | 2 / 2 |
 | fresh_v8 (12 + 8) | v7 | 8 / 8 | 11 / 11 | 6 | 5 | 4 / 0 |
 | | v8 | 8 / 8 | 10 / 10 | 6 | 5 | 4 / 1 |
+| fresh_v9 (12 + 8) | v7 | 5 / 5 | 12 / 11 | 7 | 5 | 7 / 0 |
+| | **v9** | 4 / 4 | 12 / 11 | 8 | **7** | 8 / 0 |
 
 Set sizes are (answerable incl. one empty-result case + unsupported).
 fresh_v7: FRESH7-012 unexpectedly returns no rows (no month exceeds the
@@ -141,6 +144,14 @@ negative (both metrics renamed; values verified identical).
   declined under v7, and the unsupported questions still answered under both
   arms were planned directly without any hint. Net: −1 answerable, +0
   declines, so the app stays on v7.
+* **Answerability gate (v9).** A deterministic trigger (question words not in
+  the model vocabulary or a generic analytics list) runs a verifier only
+  when needed. Calibrated on seen sets: fires on 0/113 answerable and 43/48
+  unsupported questions. On unseen fresh_v9, 7B: answerable unchanged
+  (12/12, 11 strict), unsupported questions answered anyway 2 → 0, declined
+  5 → 7, no over-refusals; the verifier passed all 6 answerable questions
+  containing benign unknown words. 3B: one gain (a what-if) and one false
+  block ("best to worst" judged not a metric). The app (7B) now uses v9.
 
 ## 4. Known limitations
 
@@ -157,11 +168,12 @@ negative (both metrics renamed; values verified identical).
   column-as-measure hint for `Total Orders` (a FactSales column) let 7B
   answer "total marketing spend by channel" with an unrelated query. The
   wording fix tried in v8 cost an answerable case and was rejected.
-* **Directly answered unsupported questions** remain the largest decline
-  gap (e.g. returned items, forecasts, vague "how are the numbers" on
-  fresh_v8): the planner emits a valid plan, so no rule or hint fires.
-  Addressing this likely needs a different mechanism (e.g. intent
-  classification or user confirmation), not more validator wording.
+* **Directly answered unsupported questions** were the largest decline gap
+  through v8 (the planner emits a valid plan, so no rule fires). The v9 gate
+  addresses this for questions with unknown wording; questions phrased
+  entirely in model vocabulary (e.g. "Show me the totals") still bypass it.
+* **Verifier is a model judgement** (same local model, one extra call when
+  triggered); 3B produced a false block on fresh_v9.
 * **Diminishing returns.** v7 and v8 produced no measured gain; further
   gains likely need real user questions rather than author-written sets.
 * **Rule gaps (by design).** Rule 2 allows same-table dimension distinct
@@ -176,7 +188,7 @@ negative (both metrics renamed; values verified identical).
   freshness, ties beyond deterministic tie-breakers, multi-turn context,
   `IN`-style multi-value filters (not expressible in the plan schema).
 * **App integration is opt-in.** `INSIGHTPILOT_AGENT=structured` runs
-  pipeline v7 in the Streamlit app (`src/structured_agent.py`, local
+  pipeline v9 in the Streamlit app (`src/structured_agent.py`, local
   `qwen2.5-coder:7b`); the default remains the original Foundry agent.
   Requirement coverage is not applied live (it needs a requirement spec).
 
@@ -194,6 +206,7 @@ negative (both metrics renamed; values verified identical).
 | `22adf9b` | Streamlit integration (opt-in) |
 | `b01145b` → `ed45eeb` | v7 → fresh_v7 set |
 | `0179ad4` → `fee3de4` | v8 → fresh_v8 set (v8 rejected) |
+| `5db2a26` → `b89ea7f` | v9 → fresh_v9 set (app switched to v9) |
 
 ## 6. Reproducing
 

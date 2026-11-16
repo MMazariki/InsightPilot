@@ -1,4 +1,4 @@
-"""Structured-planning BI agent (pipeline v7) for the Streamlit app.
+"""Structured-planning BI agent (pipeline v9) for the Streamlit app.
 
 Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request``
 / ``close`` interface) that runs locally and never executes model-written DAX:
@@ -6,6 +6,7 @@ Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request
     request guard -> local Ollama planner (plan or clarification)
     -> alias normalisation + semantic checks + schema/model validation
     -> at most one repair turn with the rejection message
+    -> answerability gate (verifier only for out-of-vocabulary wording)
     -> deterministic DAX compiler -> read-only Power BI ExecuteQueries
 
 Selected in ``src/main.py`` with ``INSIGHTPILOT_AGENT=structured``. The model
@@ -20,6 +21,7 @@ import os
 import uuid
 from typing import Any, Callable
 
+from evaluation.answerability import clarification_message, gate
 from evaluation.ollama_query_plan_adapter import (
     build_instructions,
     generate_messages,
@@ -32,7 +34,7 @@ from evaluation.run_fresh_evaluation import REPAIR_INSTRUCTION_V6
 
 LOGGER = logging.getLogger("insightpilot.structured_agent")
 
-PIPELINE_VERSION = "v7"
+PIPELINE_VERSION = "v9"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 MAX_TABLE_ROWS = 50
 
@@ -117,23 +119,36 @@ class StructuredPlanningAgent:
         raw = self.generate(self.model, question, self.instructions)
         trace["stages"].append("planner")
         try:
-            return self._parse(raw)
+            response = self._parse(raw)
         except ValueError as first_error:
             trace["stages"].append("rejected")
             trace["first_error"] = str(first_error)
             LOGGER.info("[%s] plan rejected, repairing: %s",
                         trace["trace_id"], first_error)
+            messages = [
+                {"role": "system", "content": self.instructions},
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": raw},
+                {"role": "user", "content": REPAIR_INSTRUCTION_V6.format(
+                    error=trace["first_error"])},
+            ]
+            repaired = self.chat(self.model, messages)
+            trace["stages"].append("repair")
+            response = self._parse(repaired)
 
-        messages = [
-            {"role": "system", "content": self.instructions},
-            {"role": "user", "content": question},
-            {"role": "assistant", "content": raw},
-            {"role": "user", "content": REPAIR_INSTRUCTION_V6.format(
-                error=trace["first_error"])},
-        ]
-        repaired = self.chat(self.model, messages)
-        trace["stages"].append("repair")
-        return self._parse(repaired)
+        if response["kind"] == "plan":
+            result = gate(question, response["plan"], self.chat, self.model)
+            if result["unknown_terms"]:
+                trace["stages"].append(
+                    "answerability:" + ("pass" if result["passed"] else "blocked"))
+                trace["answerability"] = {
+                    "unknown_terms": result["unknown_terms"],
+                    "reason": (result["verdict"] or {}).get("reason"),
+                }
+            if not result["passed"]:
+                return {"kind": "clarification", "reason": "undefined_metric",
+                        "message": clarification_message(result)}
+        return response
 
     # -------------------------------------------------------------
     # Public interface (matches PowerBIAgent)
