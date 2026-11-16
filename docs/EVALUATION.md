@@ -40,7 +40,8 @@ for scoring; it is not yet wired into the live app.
 | v4 | + value catalog in prompt, semantic rules 1–2, one repair turn |
 | v5 | + semantic rule 3 (prompt text identical to v4) |
 | v6 | + rule 0 fix-it hints, repair wording that discourages declining fixable mistakes, alias normalisation (prompt text identical to v4) |
-| v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure); used by the Streamlit app |
+| v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure); **used by the Streamlit app** |
+| v8 | + decline path appended to the column-as-measure hint (rejected: regressed on fresh_v8) |
 
 ## 2. Method
 
@@ -95,6 +96,8 @@ an unbiased estimate.
 | | **v6** | 10 / 10 | 12 / **11** | 6 | 5 | 3 / 0 |
 | fresh_v7 (14 + 6) | v6 | 12 / 11 | 10 / 9 | 5 | 4 | 2 / 3 |
 | | **v7** | 12 / 11 | 10 / 9 | 5 | 4 | 2 / 2 |
+| fresh_v8 (12 + 8) | v7 | 8 / 8 | 11 / 11 | 6 | 5 | 4 / 0 |
+| | v8 | 8 / 8 | 10 / 10 | 6 | 5 | 4 / 1 |
 
 Set sizes are (answerable incl. one empty-result case + unsupported).
 fresh_v7: FRESH7-012 unexpectedly returns no rows (no month exceeds the
@@ -130,6 +133,14 @@ negative (both metrics renamed; values verified identical).
   app uses v7 because it did not regress and its failure is an honest
   "could not build a valid query" rather than a false "measure does not
   exist".
+* **Decline path in the column hint (v8) — rejected.** Intended to stop the
+  column-as-measure hint enabling unsupported answers. On fresh_v8 it changed
+  one case: 7B "sales target by store region" went from correct (the v7 hint
+  led it to the existing `Sales Target` measure) to an over-refusal. The
+  substitution probes (metrics that exist only as raw columns) were already
+  declined under v7, and the unsupported questions still answered under both
+  arms were planned directly without any hint. Net: −1 answerable, +0
+  declines, so the app stays on v7.
 
 ## 4. Known limitations
 
@@ -144,7 +155,15 @@ negative (both metrics renamed; values verified identical).
   via the repair turn, so removing the decline option would cost declines.
 * **Hints can enable unsupported answers.** On fresh_v7 (v6 and v7), the
   column-as-measure hint for `Total Orders` (a FactSales column) let 7B
-  answer "total marketing spend by channel" with an unrelated query.
+  answer "total marketing spend by channel" with an unrelated query. The
+  wording fix tried in v8 cost an answerable case and was rejected.
+* **Directly answered unsupported questions** remain the largest decline
+  gap (e.g. returned items, forecasts, vague "how are the numbers" on
+  fresh_v8): the planner emits a valid plan, so no rule or hint fires.
+  Addressing this likely needs a different mechanism (e.g. intent
+  classification or user confirmation), not more validator wording.
+* **Diminishing returns.** v7 and v8 produced no measured gain; further
+  gains likely need real user questions rather than author-written sets.
 * **Rule gaps (by design).** Rule 2 allows same-table dimension distinct
   counts (e.g. customers per segment from `DimCustomer`), which can include
   entities without sales (FRESH4-010 fails strict on both models).
@@ -174,6 +193,7 @@ negative (both metrics renamed; values verified identical).
 | `65843c1` → `74e27ff` | v6 → fresh_v6 set |
 | `22adf9b` | Streamlit integration (opt-in) |
 | `b01145b` → `ed45eeb` | v7 → fresh_v7 set |
+| `0179ad4` → `fee3de4` | v8 → fresh_v8 set (v8 rejected) |
 
 ## 6. Reproducing
 
