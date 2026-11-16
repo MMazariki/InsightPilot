@@ -225,6 +225,10 @@ def app(tmp_path, monkeypatch):
     from src import llm
 
     monkeypatch.setattr(llm, "list_ollama_models", lambda *a, **k: ["qwen2.5-coder:7b"])
+    from src import report_pages
+
+    # Never call the Power BI service from tests.
+    monkeypatch.setattr(report_pages, "resolve_page_id", lambda *a, **k: None)
     from pathlib import Path
 
     main = Path(__file__).resolve().parents[1] / "src" / "main.py"

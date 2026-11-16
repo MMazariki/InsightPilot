@@ -398,7 +398,10 @@ def render(agent_mode_in_use, voice_installed):
                 key=_key("report_id"), placeholder="Built-in report")
             page_id = st.text_input(
                 "Report page ID", value=b["page_id"], key=_key("page_id"),
-                placeholder="Built-in page")
+                placeholder="Automatic: the page named AI Canvas",
+                help="Leave empty. The page is then looked up by name each "
+                     "time, so republishing the report from Power BI Desktop "
+                     "cannot break the link. Charts are added to this page.")
             powerbi_timeout = st.number_input(
                 "Wait for Power BI (seconds)", min_value=5, max_value=3600,
                 value=int(b["timeout_seconds"]), step=5, key=_key("powerbi_timeout"))

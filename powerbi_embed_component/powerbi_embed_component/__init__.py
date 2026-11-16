@@ -89,7 +89,10 @@ out = st.components.v2.component(
 
 
 DEFAULT_REPORT_ID = "59c7816e-28a0-489c-ac5d-54c2df8250c3"
-DEFAULT_PAGE_ID = "84e6ab1c3d09669a719b"
+# The "AI Canvas" page as published on 2026-11-17. Page IDs change when the
+# report is republished; the app normally looks the page up by name
+# (src/report_pages.py) and this is only the fallback.
+DEFAULT_PAGE_ID = "2d2320465a2485b3b947"
 
 
 def powerbi_embed_component(

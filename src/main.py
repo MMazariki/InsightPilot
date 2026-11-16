@@ -8,7 +8,8 @@ import streamlit as st
 
 from powerbi_embed_component import powerbi_embed_component
 from src import voice
-from src import admin_page, agent_factory
+from src import admin_page, agent_factory, report_pages
+import powerbi_embed_component as report_component
 from src import settings as app_settings
 
 
@@ -294,6 +295,11 @@ def local_model_online(base_url):
         ).ok
     except requests.RequestException:
         return False
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def current_report_page(report_id, workspace_id):
+    return report_pages.resolve_page_id(report_id, workspace_id)
 
 
 def render_answer(content):
@@ -589,11 +595,17 @@ with report_column, st.container(border=True, key="report_card"):
         "semantic model.</div>"
     )
 
+    # Republishing the report changes its page IDs, so unless one is fixed in
+    # Admin settings the current "AI Canvas" page is looked up (cached).
+    report_id = SETTINGS["powerbi"]["report_id"] or report_component.DEFAULT_REPORT_ID
+    page_id = SETTINGS["powerbi"]["page_id"] or current_report_page(
+        report_id, SETTINGS["powerbi"]["workspace_id"] or None)
+
     powerbi_embed_component(
         key="main-powerbi-report",
         visual_request=st.session_state.visual_request,
-        report_id=SETTINGS["powerbi"]["report_id"] or None,
-        page_id=SETTINGS["powerbi"]["page_id"] or None,
+        report_id=report_id,
+        page_id=page_id or None,
     )
 
 st.html(
