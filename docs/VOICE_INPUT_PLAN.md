@@ -1,6 +1,6 @@
 # Plan: voice input for the InsightPilot chat box
 
-**Status:** IMPLEMENTED on 2026-11-16 (all steps done, including a browser test with a fake microphone). Kept for reference. Written 2026-11-16 for another model to
+**Status:** IMPLEMENTED on 2026-11-16 (all steps done, including a browser test with a fake microphone). Kept for reference; `src/voice.py` has since gained silence detection and volume normalisation, so the copies in `docs/voice_input/` are the original versions. Written 2026-11-16 for another model to
 implement. Everything marked "verified" below was actually run on this
 machine on that date; do not re-research it.
 

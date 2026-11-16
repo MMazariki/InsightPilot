@@ -28,6 +28,9 @@ SAMPLE_RATE = 16000
 MIN_SECONDS = 0.4
 MAX_SECONDS = 30.0
 PROMPT_MAX_CHARS = 600
+SILENCE_PEAK = 0.01      # loudest sample below 1% of full scale = no speech
+TARGET_PEAK = 0.9
+MAX_GAIN = 30.0
 
 # Catalog columns whose values are worth teaching the recogniser.
 PROMPT_VALUE_COLUMNS = (
@@ -167,10 +170,39 @@ def vocabulary_prompt(schema_file=MODEL_SCHEMA_FILE, catalog_file=VALUE_CATALOG_
 
 
 def clean_transcript(text):
-    """Drop non-speech markers such as ``[BLANK_AUDIO]`` and tidy spaces."""
+    """Drop non-speech markers such as ``[BLANK_AUDIO]`` and tidy spaces.
+
+    Output with no letter or digit at all (whisper writes ". . ." for a
+    near-silent clip) counts as nothing heard.
+    """
 
     text = _NON_SPEECH.sub(" ", text or "")
-    return _SPACES.sub(" ", text).strip()
+    text = _SPACES.sub(" ", text).strip()
+    return text if any(character.isalnum() for character in text) else ""
+
+
+def prepare_audio(samples):
+    """Reject near-silent clips and bring quiet ones up to a normal level.
+
+    Returns ``(samples, peak)``. A webcam or laptop microphone often records
+    at a few percent of full scale, which whisper transcribes poorly; scaling
+    the clip so its loudest point is near full scale fixes that. A clip whose
+    loudest point is below ``SILENCE_PEAK`` holds no usable speech: usually
+    the browser is recording from the wrong device.
+    """
+
+    peak = float(np.abs(samples).max()) if len(samples) else 0.0
+    if peak < SILENCE_PEAK:
+        raise VoiceError(
+            "The recording was silent. The browser is probably listening to "
+            "the wrong microphone: click the icon at the left of the address "
+            "bar, open the microphone setting, choose your real microphone, "
+            "and try again."
+        )
+    gain = min(TARGET_PEAK / peak, MAX_GAIN)
+    if gain > 1.0:
+        samples = np.ascontiguousarray(samples * gain, dtype=np.float32)
+    return samples, peak
 
 
 class Transcriber:
@@ -224,7 +256,17 @@ class Transcriber:
 def transcribe_wav(data, transcriber):
     """WAV bytes -> question text. Raises ``VoiceError`` with a user message."""
 
-    text = transcriber.transcribe(decode_wav(data))
+    samples = decode_wav(data)
+    seconds = len(samples) / SAMPLE_RATE
+    try:
+        samples, peak = prepare_audio(samples)
+    except VoiceError:
+        print(f"[VOICE] clip {seconds:.1f}s was silent", flush=True)
+        raise
+    text = transcriber.transcribe(samples)
+    # Levels and length only; what was said is never logged.
+    print(f"[VOICE] clip {seconds:.1f}s peak={peak:.3f} -> "
+          f"{len(text)} characters", flush=True)
     if not text:
         raise VoiceError(
             "I couldn't hear a question in that recording. Check the "

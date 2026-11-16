@@ -315,3 +315,12 @@ def test_list_ollama_models(monkeypatch):
 
     monkeypatch.setattr(llm.requests, "get", down)
     assert llm.list_ollama_models("http://localhost:11434") == []
+
+
+def test_ollama_out_of_memory_is_explained(post):
+    post.response = FakeResponse(status=500, text=(
+        '{"error":"llama-server process has terminated: exit status 1: '
+        'ggml_backend_cpu_buffer_type_alloc_buffer: failed to allocate buffer '
+        'of size 1016170496"}'))
+    with pytest.raises(llm.ModelError, match="out of free memory"):
+        llm.chat_once(block(), MESSAGES)

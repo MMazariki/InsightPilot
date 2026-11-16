@@ -160,3 +160,37 @@ def test_settings_from_environment(monkeypatch):
     monkeypatch.setenv("INSIGHTPILOT_VOICE_AUTOSEND", "1")
     assert voice.model_name() == "small.en"
     assert voice.autosend_enabled() is True
+
+
+# ---- quiet and silent recordings -------------------------------------
+
+@pytest.mark.parametrize("raw", [". . .", "...", " . ", "?!", "-"])
+def test_punctuation_only_output_counts_as_nothing_heard(raw):
+    assert voice.clean_transcript(raw) == ""
+
+
+def test_silent_recording_points_at_the_microphone_choice():
+    transcriber = voice.Transcriber(prompt="", engine=FakeEngine(["hello"]))
+    with pytest.raises(voice.VoiceError, match="wrong microphone"):
+        voice.transcribe_wav(make_wav(1.0, amplitude=0.001), transcriber)
+    assert transcriber._engine.calls == []  # the model is not even run
+
+
+def test_quiet_recording_is_amplified_before_transcription():
+    engine = FakeEngine(["Net sales by region"])
+    transcriber = voice.Transcriber(prompt="", engine=engine)
+    voice.transcribe_wav(make_wav(1.0, amplitude=0.03), transcriber)
+    samples, _ = engine.calls[0]
+    assert 0.85 < float(np.abs(samples).max()) <= 0.91
+
+
+def test_loud_recording_is_left_alone():
+    samples = voice.decode_wav(make_wav(1.0, amplitude=0.95))
+    prepared, peak = voice.prepare_audio(samples)
+    assert prepared is samples and peak > 0.9
+
+
+def test_dots_from_the_model_are_reported_as_not_heard():
+    transcriber = voice.Transcriber(prompt="", engine=FakeEngine([". . ."]))
+    with pytest.raises(voice.VoiceError, match="couldn't hear"):
+        voice.transcribe_wav(make_wav(1.0), transcriber)

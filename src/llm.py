@@ -100,8 +100,14 @@ def _ollama_chat(config, model, messages):
             f"Ollama does not have the model '{model}'. Install it with: "
             f"ollama pull {model}")
     if not response.ok:
+        detail = response.text
+        if "allocate" in detail or "out of memory" in detail.lower():
+            raise ModelError(
+                "The local model could not start because this computer is "
+                "out of free memory. Close some applications (for example "
+                "Power BI Desktop or browser tabs) and ask again.")
         raise ModelError(
-            f"Ollama returned HTTP {response.status_code}: {response.text[:300]}")
+            f"Ollama returned HTTP {response.status_code}: {detail[:300]}")
     return response.json()["message"]["content"].strip()
 
 
