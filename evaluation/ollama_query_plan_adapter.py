@@ -62,12 +62,8 @@ def generate_plan(model, question, instructions):
     return response.json()["message"]["content"].strip()
 
 
-def main():
-    cases = json.loads(
-        (EVAL / "holdout_cases.json").read_text(
-            encoding="utf-8-sig"
-        )
-    )
+def build_instructions():
+    """Build the v1 planner system prompt (prompt + model + plan contract)."""
 
     contract = json.loads(
         (EVAL / "query_plan_schema.json").read_text(
@@ -86,7 +82,7 @@ def main():
         for r in model_schema["ActiveRelationships"]
     )
 
-    instructions = (
+    return (
         prompt
         + "\n\nSEMANTIC MODEL:\n"
         + load_schema()
@@ -95,6 +91,16 @@ def main():
         + "\n\nQUERY PLAN JSON SCHEMA:\n"
         + json.dumps(contract, separators=(",", ":"))
     )
+
+
+def main():
+    cases = json.loads(
+        (EVAL / "holdout_cases.json").read_text(
+            encoding="utf-8-sig"
+        )
+    )
+
+    instructions = build_instructions()
 
     RESULTS.mkdir(parents=True, exist_ok=True)
 
