@@ -1,0 +1,168 @@
+{
+  "captured_at_utc": "2026-11-16T11:55:46.387900+00:00",
+  "max_values": 25,
+  "columns": {
+    "DimCustomer[CustomerSegment]": [
+      "Corporate",
+      "Member",
+      "Regular",
+      "Tourist"
+    ],
+    "DimCustomer[Gender]": [
+      "Female",
+      "Male",
+      "Not Specified"
+    ],
+    "DimCustomer[AgeBand]": [
+      "18-24",
+      "25-34",
+      "35-44",
+      "45-54",
+      "55+"
+    ],
+    "DimCustomer[City]": [
+      "Abha",
+      "Buraydah",
+      "Dammam",
+      "Hail",
+      "Jeddah",
+      "Khobar",
+      "Madinah",
+      "Makkah",
+      "Riyadh",
+      "Tabuk"
+    ],
+    "DimDate[Quarter]": [
+      "Q1",
+      "Q2",
+      "Q3",
+      "Q4"
+    ],
+    "DimDate[MonthName]": [
+      "April",
+      "August",
+      "December",
+      "February",
+      "January",
+      "July",
+      "June",
+      "March",
+      "May",
+      "November",
+      "October",
+      "September"
+    ],
+    "DimDate[DayName]": [
+      "Friday",
+      "Monday",
+      "Saturday",
+      "Sunday",
+      "Thursday",
+      "Tuesday",
+      "Wednesday"
+    ],
+    "DimProduct[Category]": [
+      "Accessories",
+      "Beverages",
+      "Food",
+      "Snacks"
+    ],
+    "DimProduct[Subcategory]": [
+      "Bakery",
+      "Biscuits",
+      "Candy",
+      "Chips",
+      "Chocolate",
+      "Coffee",
+      "Convenience",
+      "Dairy",
+      "Electronics",
+      "Frozen",
+      "Juice",
+      "Nuts",
+      "Personal Care",
+      "Ready Meals",
+      "Sandwiches",
+      "Seasonal",
+      "Soft Drinks",
+      "Tea",
+      "Travel",
+      "Water"
+    ],
+    "DimProduct[Brand]": [
+      "Daily",
+      "FreshWay",
+      "Mahali Select",
+      "Noura",
+      "Peak",
+      "PureLife",
+      "SunBite"
+    ],
+    "DimStore[StoreName]": [
+      "Abha Mall 1",
+      "Abha Mall 2",
+      "Buraydah Mall 1",
+      "Buraydah Mall 2",
+      "Dammam Mall 1",
+      "Dammam Mall 2",
+      "Hail Street 1",
+      "Hail Street 2",
+      "Jeddah Street 1",
+      "Jeddah Street 2",
+      "Khobar Street 1",
+      "Khobar Street 2",
+      "Madinah Street 1",
+      "Madinah Street 2",
+      "Makkah Mall 1",
+      "Makkah Mall 2",
+      "Riyadh Mall 1",
+      "Riyadh Mall 2",
+      "Tabuk Street 1",
+      "Tabuk Street 2"
+    ],
+    "DimStore[City]": [
+      "Abha",
+      "Buraydah",
+      "Dammam",
+      "Hail",
+      "Jeddah",
+      "Khobar",
+      "Madinah",
+      "Makkah",
+      "Riyadh",
+      "Tabuk"
+    ],
+    "DimStore[Region]": [
+      "Central",
+      "Eastern",
+      "Northern",
+      "Southern",
+      "Western"
+    ],
+    "DimStore[StoreType]": [
+      "Express",
+      "Mall",
+      "Street"
+    ],
+    "FactSales[Channel]": [
+      "Click & Collect",
+      "Delivery",
+      "In-Store"
+    ],
+    "FactSales[PaymentMethod]": [
+      "Card",
+      "Cash",
+      "Online",
+      "Wallet"
+    ],
+    "FactTarget[Category]": [
+      "Accessories",
+      "Beverages",
+      "Food",
+      "Snacks"
+    ]
+  },
+  "skipped_high_cardinality": {
+    "DimProduct[ProductName]": 48
+  }
+}

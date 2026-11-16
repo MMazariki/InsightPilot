@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator
 
 from evaluation.query_plan_validator import validate_query_plan
 from evaluation.request_guard import screen_request
+from evaluation.semantic_checks import check_semantic_rules
 
 EVAL = Path(__file__).resolve().parent
 CLARIFICATION_SCHEMA_FILE = EVAL / "clarification_schema.json"
@@ -41,7 +42,7 @@ def validate_clarification(payload):
     return payload
 
 
-def parse_planner_response(raw):
+def parse_planner_response(raw, semantic_checks=False):
     """Parse raw planner text into a validated plan or clarification.
 
     Returns ``{"kind": "plan", "plan": ...}`` or
@@ -63,6 +64,10 @@ def parse_planner_response(raw):
             "message": detail["message"],
         }
 
+    if semantic_checks:
+        # Run first: its messages are more actionable for repair (e.g. it
+        # lists allowed values where the validator only reports a type error).
+        check_semantic_rules(payload)
     validate_query_plan(payload)
     return {"kind": "plan", "plan": payload}
 

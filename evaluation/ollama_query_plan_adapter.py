@@ -66,6 +66,7 @@ PROMPT_FILES = {
     "v1": "query_plan_prompt_v1.txt",
     "v2": "query_plan_prompt_v2.txt",
     "v3": "query_plan_prompt_v3.txt",
+    "v4": "query_plan_prompt_v4.txt",
 }
 
 
@@ -113,7 +114,35 @@ def build_instructions(prompt_version="v1"):
             + json.dumps(clarification, separators=(",", ":"))
         )
 
+    if prompt_version not in ("v1", "v2", "v3"):
+        from evaluation.semantic_checks import describe_catalog
+
+        instructions += "\n\nCOLUMN VALUES:\n" + describe_catalog()
+
     return instructions
+
+
+def generate_messages(model, messages):
+    """Chat call with an explicit message list (used for one repair turn)."""
+
+    response = requests.post(
+        "http://localhost:11434/api/chat",
+        json={
+            "model": model,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0,
+                "num_ctx": 8192,
+            },
+            "messages": messages,
+        },
+        timeout=240,
+    )
+
+    response.raise_for_status()
+
+    return response.json()["message"]["content"].strip()
 
 
 def main():

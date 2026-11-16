@@ -64,13 +64,22 @@ SETS = {
     "fresh_v1": "fresh_cases_v1.json",
     "fresh_v2": "fresh_cases_v2.json",
     "fresh_v3": "fresh_cases_v3.json",
+    "fresh_v4": "fresh_cases_v4.json",
 }
-PROMPTS = ("v1", "v2", "v3")
+PROMPTS = ("v1", "v2", "v3", "v4")
+# Prompts whose pipeline adds semantic checks and one validator-feedback
+# repair attempt for rejected plans.
+REPAIR_PROMPTS = {"v4"}
+REPAIR_INSTRUCTION = (
+    "Your previous response was rejected: {error}\n"
+    "Return a corrected JSON object: either a query plan that fixes this "
+    "problem or a clarification object. Return JSON only."
+)
 
 # Comparator per case set is fixed so every arm on a set is scored by the same
 # rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
 # sets tolerate several renamed metrics (values remain strict).
-MULTI_ALIAS_SETS = {"fresh_v3"}
+MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4"}
 
 
 def comparators_for(set_name):
@@ -220,7 +229,8 @@ def plan_record(case, model, raw, prompt="v1"):
             validate_query_plan(payload)
             record["status"] = "valid_plan"
         else:
-            parsed = parse_planner_response(payload)
+            parsed = parse_planner_response(
+                payload, semantic_checks=prompt in REPAIR_PROMPTS)
             if parsed["kind"] == "plan":
                 record["status"] = "valid_plan"
             else:
@@ -234,9 +244,43 @@ def plan_record(case, model, raw, prompt="v1"):
     return record
 
 
+def attempt_repair(case, model, instructions, record, prompt, chat,
+                   sleep=time.sleep):
+    """One bounded repair turn for a rejected (invalid) plan.
+
+    Only validator/semantic-check rejections are repaired; valid plans are
+    never second-guessed. ``chat(model, messages)`` returns raw text.
+    """
+
+    messages = [
+        {"role": "system", "content": instructions},
+        {"role": "user", "content": case["question"]},
+        {"role": "assistant", "content": record.get("raw_response", "")},
+        {"role": "user",
+         "content": REPAIR_INSTRUCTION.format(error=record.get("error"))},
+    ]
+
+    def call(model_name, question, system):
+        return chat(model_name, messages)
+
+    raw, attempts, errors = generate_with_retry(call, model, None, None,
+                                                sleep=sleep)
+    repaired = plan_record(case, model, raw, prompt)
+    repaired["attempts"] = record.get("attempts", 1)
+    repaired["infrastructure_errors"] = record.get("infrastructure_errors", [])
+    repaired["repair"] = {
+        "first_raw_response": record.get("raw_response"),
+        "first_error": record.get("error"),
+        "repair_attempts": attempts,
+        "repair_infrastructure_errors": errors,
+        "succeeded": repaired["status"] != "invalid_plan",
+    }
+    return repaired
+
+
 def generate_plans(paths, prompt="v1"):
     from evaluation.ollama_query_plan_adapter import (
-        build_instructions, generate_plan,
+        build_instructions, generate_messages, generate_plan,
     )
 
     refuse_overwrite(paths["plans"])
@@ -267,6 +311,12 @@ def generate_plans(paths, prompt="v1"):
                 record = plan_record(case, model, raw, prompt)
                 record["attempts"] = attempts
                 record["infrastructure_errors"] = errors
+                if (prompt in REPAIR_PROMPTS
+                        and record["status"] == "invalid_plan"):
+                    print(f"  rejected, repairing: {record['error']}",
+                          flush=True)
+                    record = attempt_repair(case, model, instructions,
+                                            record, prompt, generate_messages)
             except Exception as exc:
                 record = {"id": case["id"], "model": model,
                           "status": "infrastructure_error", "error": str(exc)}
@@ -278,6 +328,7 @@ def generate_plans(paths, prompt="v1"):
         "cases_file": paths["cases"].name,
         "prompt_version": prompt,
         "request_guard": use_guard,
+        "semantic_checks_and_repair": prompt in REPAIR_PROMPTS,
         "prompt_sha256": hashlib.sha256(instructions.encode("utf-8")).hexdigest(),
         "num_ctx": NUM_CTX,
         "temperature": 0,
