@@ -73,6 +73,8 @@ PROMPT_FILES = {
     "v6": "query_plan_prompt_v4.txt",
     # v7 adds expression-kind hints (rule 0b); prompt text unchanged.
     "v7": "query_plan_prompt_v4.txt",
+    # v8 adds the decline path to the column-as-measure hint; prompt unchanged.
+    "v8": "query_plan_prompt_v4.txt",
 }
 
 

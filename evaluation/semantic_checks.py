@@ -122,12 +122,21 @@ def check_expression_kinds(plan, model=None):
     return plan
 
 
-def check_reference_hints(plan, model=None):
+COLUMN_AS_MEASURE_DECLINE = (
+    " If the user asked for a metric that none of these measures provides, "
+    "do not substitute a column or another measure; return a clarification."
+)
+
+
+def check_reference_hints(plan, model=None, column_hint_declines=False):
     """Rule 0 (pipeline v6): fix-it messages for misplaced references.
 
     Only references that exist elsewhere in the model get a "use X instead"
     hint. A measure that does not exist anywhere keeps clarification as the
     suggested path, so undefined metrics are not pushed into substitutes.
+    ``column_hint_declines`` (pipeline v8) adds the clarification path to the
+    column-as-measure hint too (on fresh_v7 that hint let 7B answer an
+    unsupported question with an unrelated column).
     """
 
     model = load_model() if model is None else model
@@ -171,6 +180,8 @@ def check_reference_hints(plan, model=None):
                         f"{' / '.join(found)}. Use it in group_by or in a "
                         f"column filter, and use an existing measure as the "
                         f"metric (measures: {', '.join(measures)})."
+                        + (COLUMN_AS_MEASURE_DECLINE
+                           if column_hint_declines else "")
                     )
                 raise ValueError(
                     f"No measure named '{name}' exists. Available measures: "
@@ -212,7 +223,8 @@ def check_reference_hints(plan, model=None):
 def check_semantic_rules(plan, catalog=None, model=None,
                          reject_single_value_grouping=False,
                          reference_hints=False,
-                         expression_kind_hints=False):
+                         expression_kind_hints=False,
+                         column_hint_declines=False):
     """Raise ``ValueError`` with an actionable message, else return plan.
 
     ``reject_single_value_grouping`` enables rule 3 (pipeline v5): a column
@@ -229,7 +241,8 @@ def check_semantic_rules(plan, catalog=None, model=None,
     if expression_kind_hints:
         check_expression_kinds(plan, model)
     if reference_hints:
-        check_reference_hints(plan, model)
+        check_reference_hints(plan, model,
+                              column_hint_declines=column_hint_declines)
 
     # Rule 3 (optional): grouping by a column filtered to a single value.
     if reject_single_value_grouping:
