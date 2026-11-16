@@ -57,3 +57,6 @@ logs/
 
 # Admin settings and encrypted API keys (per machine)
 config/
+
+# Voice model files (downloaded on first use)
+models/

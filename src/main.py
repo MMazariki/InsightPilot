@@ -7,6 +7,7 @@ import requests
 import streamlit as st
 
 from powerbi_embed_component import powerbi_embed_component
+from src import voice
 from src import admin_page, agent_factory
 from src import settings as app_settings
 
@@ -244,6 +245,18 @@ if "visual_request" not in st.session_state:
     st.session_state.visual_request = None
 if "queued_prompt" not in st.session_state:
     st.session_state.queued_prompt = None
+if "voice_draft" not in st.session_state:
+    st.session_state.voice_draft = None
+if "voice_notice" not in st.session_state:
+    st.session_state.voice_notice = None
+
+# The microphone button is shown only when speech-to-text is installed.
+VOICE_ENABLED = voice.is_available()
+
+
+@st.cache_resource(show_spinner=False)
+def get_transcriber():
+    return voice.Transcriber()
 if "view" not in st.session_state:
     st.session_state.view = (
         "admin" if st.query_params.get("view") == "admin" else "chat")
@@ -425,10 +438,60 @@ with chat_column, st.container(border=True, key="chat_card"):
         height=SETTINGS["interface"]["chat_height"], border=False,
         key="chat_scroll")
 
-    prompt = st.chat_input(
-        "Ask a business question...",
-        key="agent_chat_input",
-    )
+    notice_slot = st.empty()
+    if st.session_state.voice_notice:
+        notice = st.session_state.voice_notice
+        st.session_state.voice_notice = None
+        if notice["kind"] == "error":
+            notice_slot.warning(notice["text"], icon=":material/mic_off:")
+        else:
+            notice_slot.info(notice["text"], icon=":material/mic:")
+
+    # A heard question waiting for review goes into the input box. This
+    # must be set before the widget is created in this run.
+    if st.session_state.voice_draft:
+        st.session_state["agent_chat_input"] = st.session_state.voice_draft
+        st.session_state.voice_draft = None
+
+    if VOICE_ENABLED:
+        submission = st.chat_input(
+            "Ask a business question, or use the microphone...",
+            key="agent_chat_input",
+            accept_audio=True,
+            audio_sample_rate=voice.SAMPLE_RATE,
+        )
+    else:
+        submission = st.chat_input(
+            "Ask a business question...",
+            key="agent_chat_input",
+        )
+
+    # With the microphone on, even typed questions arrive as an object
+    # with .text and .audio, not as a plain string.
+    typed_text, audio_bytes = voice.split_submission(submission)
+    prompt = typed_text or None
+
+    if audio_bytes:
+        heard = ""
+        with chat_container, st.spinner("Transcribing your voice..."):
+            try:
+                heard = voice.transcribe_wav(audio_bytes, get_transcriber())
+            except voice.VoiceError as exc:
+                st.session_state.voice_notice = {
+                    "kind": "error", "text": str(exc)}
+        combined = " ".join(part for part in (typed_text, heard) if part)
+        if heard and voice.autosend_enabled():
+            prompt = combined
+        else:
+            if heard:
+                st.session_state.voice_notice = {
+                    "kind": "info",
+                    "text": "Check the question in the box, then press "
+                            "Enter to send it.",
+                }
+            st.session_state.voice_draft = combined or None
+            st.rerun()
+
     if st.session_state.queued_prompt:
         prompt = st.session_state.queued_prompt
         st.session_state.queued_prompt = None

@@ -3,3 +3,4 @@ msal
 msal-extensions
 requests
 anthropic>=2,<3
+pywhispercpp>=1.5,<2

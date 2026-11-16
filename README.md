@@ -67,6 +67,18 @@ Things to know:
   access; you need an API key from the provider's developer console.
 * The page has no password. The app is only reachable from this computer.
 
+## Asking by voice
+
+Click the microphone in the question box, ask your question, and stop the
+recording. InsightPilot writes what it heard into the box; check it and
+press Enter. The first time, the browser asks for permission to use the
+microphone.
+
+Speech is turned into text on this computer (whisper.cpp, English). The
+first use downloads a 141 MB model into `models\`. To send spoken
+questions without the review step, switch it on under Admin settings
+(gear button) → Voice.
+
 ## One-time setup
 
 In PowerShell, from the project folder:
