@@ -66,6 +66,11 @@ def parse_planner_response(raw, semantic_checks=False):
         }
 
     normalizations = []
+    if semantic_checks == "v9":
+        # Pipeline v9 = v7 checks (v8 rejected) + answerability gate, which
+        # runs after parsing in the caller.
+        semantic_checks = "v7"
+
     if semantic_checks in ("v6", "v7", "v8"):
         payload, normalizations = sanitize_aliases(payload)
 
