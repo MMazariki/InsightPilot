@@ -81,6 +81,8 @@ PROMPT_FILES = {
     "v10": "query_plan_prompt_v4.txt",
     # v11 = v10 + no-metric gate trigger; prompt unchanged.
     "v11": "query_plan_prompt_v4.txt",
+    # v12 = v11 + stricter metric-word list in the gate; prompt unchanged.
+    "v12": "query_plan_prompt_v4.txt",
 }
 
 

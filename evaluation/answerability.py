@@ -187,15 +187,31 @@ transaction transactions target targets variance achievement brand brands
 city cities segment segments category categories subcategory subcategories
 channel channels method methods region regions
 """.split())
+# Pipeline v12: only quantities and countable transaction entities name a
+# metric. Grouping entities (store, brand, city, segment, category, channel,
+# method, region) no longer do, so "Rank the regions" is verified; counting
+# them still passes through COUNT_PHRASES ("how many stores ...").
+# Calibration on the (already seen) fresh_v1-v10 sets: flags 0/137
+# answerable questions; the gate triggers on 63/64 unsupported ones.
+QUANTITY_WORDS = set("""
+revenue revenues sales sale sold profit profits margin margins discount
+discounts unit units item items quantity quantities order orders customer
+customers shopper shoppers buyer buyers product products transaction
+transactions target targets variance achievement
+""".split())
 GENERIC_MEASURE_TOKENS = {"total", "of", "on", "per"}
 COUNT_PHRASES = re.compile(r"\bhow many\b|\bnumber of\b|\bcount\b", re.I)
 
 
-def names_a_metric(question, model=None):
-    """True if the question names a measure-like quantity or counts entities."""
+def names_a_metric(question, model=None, strict=False):
+    """True if the question names a measure-like quantity or counts entities.
+
+    ``strict`` (pipeline v12) uses ``QUANTITY_WORDS`` instead of
+    ``METRIC_WORDS``.
+    """
 
     model = load_model() if model is None else model
-    words = set(METRIC_WORDS)
+    words = set(QUANTITY_WORDS if strict else METRIC_WORDS)
     for table in model["Tables"]:
         for measure in table.get("Measures", []):
             words.update(t for t in _tokens(measure["Name"])
@@ -212,16 +228,19 @@ NO_METRIC_NOTE = ("The question does not name any metric or quantity; unless "
 
 
 def gate(question, plan, chat, model_name, vocabulary=None, model=None,
-         require_metric_reference=False):
+         require_metric_reference=False, strict_metric_words=False):
     """Return ``{"passed": bool, "unknown_terms": [...], "verdict": ...}``.
 
     ``require_metric_reference`` (pipeline v11) also runs the verifier when
     the question names no metric at all (e.g. "Show me the totals").
+    ``strict_metric_words`` (pipeline v12) stops grouping entities such as
+    "regions" from counting as a metric.
     """
 
     model = load_model() if model is None else model
     unknown = unknown_terms(question, vocabulary)
-    no_metric = require_metric_reference and not names_a_metric(question, model)
+    no_metric = require_metric_reference and not names_a_metric(
+        question, model, strict=strict_metric_words)
     if not unknown and not no_metric:
         return {"passed": True, "unknown_terms": [], "verdict": None}
     measures = sorted(measure["Name"] for table in model["Tables"]

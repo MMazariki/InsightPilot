@@ -91,7 +91,8 @@ def test_verifier_prompt_unchanged_without_note():
 
 
 def test_runner_v11_wiring():
-    assert fresh.METRIC_REFERENCE_PROMPTS == {"v11"}
+    assert "v11" in fresh.METRIC_REFERENCE_PROMPTS
+    assert "v11" not in fresh.STRICT_METRIC_PROMPTS
     assert "v11" in fresh.GATE_PROMPTS
     assert build_instructions("v11") == build_instructions("v10")
     record = {"status": "valid_plan", "plan": PLAN}
