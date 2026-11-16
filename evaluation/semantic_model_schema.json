@@ -1,0 +1,465 @@
+{
+  "Tables": [
+    {
+      "Name": "DimCustomer",
+      "Columns": [
+        {
+          "Name": "CustomerKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "CustomerID",
+          "Type": "Text"
+        },
+        {
+          "Name": "CustomerSegment",
+          "Type": "Text"
+        },
+        {
+          "Name": "Gender",
+          "Type": "Text"
+        },
+        {
+          "Name": "AgeBand",
+          "Type": "Text"
+        },
+        {
+          "Name": "City",
+          "Type": "Text"
+        }
+      ]
+    },
+    {
+      "Name": "DimDate",
+      "Columns": [
+        {
+          "Name": "DateKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Date",
+          "Type": "DateTime",
+          "FormatString": "D",
+          "VariationColumns": [
+            {
+              "Name": "Date",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Year",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "MonthNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Month",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "QuarterNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Quarter",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Day",
+              "Type": null,
+              "SortByColumnName": null
+            }
+          ]
+        },
+        {
+          "Name": "Year",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Quarter",
+          "Type": "Text"
+        },
+        {
+          "Name": "MonthNumber",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "MonthName",
+          "Type": "Text"
+        },
+        {
+          "Name": "YearMonth",
+          "Type": "DateTime",
+          "FormatString": "D",
+          "VariationColumns": [
+            {
+              "Name": "Date",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Year",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "MonthNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Month",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "QuarterNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Quarter",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Day",
+              "Type": null,
+              "SortByColumnName": null
+            }
+          ]
+        },
+        {
+          "Name": "WeekNumber",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "DayName",
+          "Type": "Text"
+        },
+        {
+          "Name": "IsWeekend",
+          "Type": "Boolean",
+          "FormatString": "\"TRUE\";\"TRUE\";\"FALSE\""
+        }
+      ]
+    },
+    {
+      "Name": "DimProduct",
+      "Columns": [
+        {
+          "Name": "ProductKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "SKU",
+          "Type": "Text"
+        },
+        {
+          "Name": "ProductName",
+          "Type": "Text"
+        },
+        {
+          "Name": "Category",
+          "Type": "Text"
+        },
+        {
+          "Name": "Subcategory",
+          "Type": "Text"
+        },
+        {
+          "Name": "Brand",
+          "Type": "Text"
+        },
+        {
+          "Name": "UnitPriceSAR",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "UnitCostSAR",
+          "Type": "Double"
+        },
+        {
+          "Name": "IsActive",
+          "Type": "Boolean",
+          "FormatString": "\"TRUE\";\"TRUE\";\"FALSE\""
+        }
+      ]
+    },
+    {
+      "Name": "DimStore",
+      "Columns": [
+        {
+          "Name": "StoreKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "StoreCode",
+          "Type": "Text"
+        },
+        {
+          "Name": "StoreName",
+          "Type": "Text"
+        },
+        {
+          "Name": "City",
+          "Type": "Text"
+        },
+        {
+          "Name": "Region",
+          "Type": "Text"
+        },
+        {
+          "Name": "StoreType",
+          "Type": "Text"
+        },
+        {
+          "Name": "AreaSqM",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "IsActive",
+          "Type": "Boolean",
+          "FormatString": "\"TRUE\";\"TRUE\";\"FALSE\""
+        }
+      ]
+    },
+    {
+      "Name": "FactSales",
+      "Measures": [
+        {
+          "Name": "Margin %",
+          "Type": "Double",
+          "FormatString": "0.00%;-0.00%;0.00%"
+        },
+        {
+          "Name": "Gross Margin %",
+          "Type": "Double",
+          "FormatString": "0.00%;-0.00%;0.00%"
+        },
+        {
+          "Name": "Sales Variance",
+          "Type": "Double"
+        },
+        {
+          "Name": "Target Achievement %",
+          "Type": "Double"
+        },
+        {
+          "Name": "Net Sales",
+          "Type": "Double"
+        },
+        {
+          "Name": "Gross Sales",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Gross Profit",
+          "Type": "Double"
+        },
+        {
+          "Name": "Margin on Gross Sales %",
+          "Type": "Double"
+        },
+        {
+          "Name": "Units Sold",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Total Discounts",
+          "Type": "Double"
+        },
+        {
+          "Name": "Sales Target",
+          "Type": "Double"
+        }
+      ],
+      "Columns": [
+        {
+          "Name": "SalesLineID",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "OrderID",
+          "Type": "Text"
+        },
+        {
+          "Name": "DateKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "StoreKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "ProductKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "CustomerKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Quantity",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "UnitPriceSAR",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "GrossSalesSAR",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "DiscountSAR",
+          "Type": "Double"
+        },
+        {
+          "Name": "NetSalesSAR",
+          "Type": "Double"
+        },
+        {
+          "Name": "CostSAR",
+          "Type": "Double"
+        },
+        {
+          "Name": "GrossProfitSAR",
+          "Type": "Double"
+        },
+        {
+          "Name": "Channel",
+          "Type": "Text"
+        },
+        {
+          "Name": "PaymentMethod",
+          "Type": "Text"
+        },
+        {
+          "Name": "Total Orders",
+          "Type": "Integer",
+          "FormatString": "0"
+        }
+      ]
+    },
+    {
+      "Name": "FactTarget",
+      "Measures": [
+        {
+          "Name": "Variance",
+          "Type": "Double"
+        }
+      ],
+      "Columns": [
+        {
+          "Name": "YearMonth",
+          "Type": "DateTime",
+          "FormatString": "D",
+          "VariationColumns": [
+            {
+              "Name": "Date",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Year",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "MonthNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Month",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "QuarterNo",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Quarter",
+              "Type": null,
+              "SortByColumnName": null
+            },
+            {
+              "Name": "Day",
+              "Type": null,
+              "SortByColumnName": null
+            }
+          ]
+        },
+        {
+          "Name": "StoreKey",
+          "Type": "Integer",
+          "FormatString": "0"
+        },
+        {
+          "Name": "Category",
+          "Type": "Text"
+        },
+        {
+          "Name": "SalesTargetSAR",
+          "Type": "Double"
+        }
+      ]
+    }
+  ],
+  "ActiveRelationships": [
+    {
+      "PK": "'DimCustomer'[CustomerKey]",
+      "FK": "'FactSales'[CustomerKey]",
+      "UnidirectionalFilter": "'DimCustomer' filters 'FactSales'"
+    },
+    {
+      "PK": "'DimDate'[DateKey]",
+      "FK": "'FactSales'[DateKey]",
+      "UnidirectionalFilter": "'DimDate' filters 'FactSales'"
+    },
+    {
+      "PK": "'DimProduct'[ProductKey]",
+      "FK": "'FactSales'[ProductKey]",
+      "UnidirectionalFilter": "'DimProduct' filters 'FactSales'"
+    },
+    {
+      "PK": "'DimStore'[StoreKey]",
+      "FK": "'FactSales'[StoreKey]",
+      "UnidirectionalFilter": "'DimStore' filters 'FactSales'"
+    },
+    {
+      "PK": "'DimStore'[StoreKey]",
+      "FK": "'FactTarget'[StoreKey]",
+      "UnidirectionalFilter": "'DimStore' filters 'FactTarget'"
+    }
+  ]
+}

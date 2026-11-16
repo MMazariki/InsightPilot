@@ -8,12 +8,15 @@ from jsonschema import Draft202012Validator
 ROOT = Path(__file__).resolve().parents[1]
 EVAL = ROOT / "evaluation"
 
+# Committed, sanitised snapshot of the semantic-model schema (tables, columns,
+# measures, relationships only; no workspace/model identifiers). The live
+# probe output (fabric_iq_schema.json) is gitignored; a drift test compares
+# the two whenever the live file is present.
+MODEL_SCHEMA_FILE = EVAL / "semantic_model_schema.json"
+
 
 def load_model():
-    wrapper = json.loads(
-        (ROOT / "fabric_iq_schema.json").read_text(encoding="utf-8-sig")
-    )
-    return json.loads(wrapper["content"][0]["text"])["schema"]
+    return json.loads(MODEL_SCHEMA_FILE.read_text(encoding="utf-8-sig"))
 
 
 def validate_query_plan(plan):

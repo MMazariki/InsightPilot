@@ -3,7 +3,6 @@ from pathlib import Path
 
 import requests
 
-from evaluation.ollama_adapter_v2 import load_schema
 from evaluation.query_plan_validator import (
     load_model,
     validate_query_plan,
@@ -16,6 +15,27 @@ EVAL = ROOT / "evaluation"
 RESULTS = EVAL / "results"
 
 MODELS = ["qwen2.5-coder:3b", "qwen2.5-coder:7b"]
+
+
+def load_schema():
+    """Describe the semantic model for the prompt.
+
+    Same text format as ``ollama_adapter_v2.load_schema`` but sourced from the
+    committed schema snapshot, so prompts are reproducible from a clean clone.
+    """
+
+    lines = []
+    for table in load_model()["Tables"]:
+        columns = [c["Name"] for c in table.get("Columns", [])]
+        measures = [m["Name"] for m in table.get("Measures", [])]
+
+        lines.append(
+            f"Table {table['Name']}: "
+            f"Columns: {', '.join(columns)}; "
+            f"Measures: {', '.join(measures)}"
+        )
+
+    return "\n".join(lines)
 
 
 def generate_plan(model, question, instructions):
