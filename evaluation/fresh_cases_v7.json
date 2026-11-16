@@ -1,0 +1,200 @@
+{
+  "version": 7,
+  "description": "Seventh fresh held-out set, authored 2026-11-16 AFTER pipeline v7 (expression-kind hints) was committed (b01145b), and committed before any reference capture or model generation on it. Used for a same-case A/B of pipeline v6 vs v7. Answerable questions use aggregation wording (total, sum, count, unique) that tends to elicit unsupported expression kinds; the live app question that motivated v7 is deliberately excluded.",
+  "cases": [
+    {
+      "id": "FRESH7-001", "category": "answerable", "probe": "aggregation_wording",
+      "question": "What is the total number of units sold per brand?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimProduct[Brand]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimProduct'[Brand],\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH7-002", "category": "answerable", "probe": "aggregation_wording",
+      "question": "Sum up gross profit by store type.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Profit"}],
+        "group_by": ["DimStore[StoreType]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[StoreType],\n    \"Gross Profit\", [Gross Profit]\n)"
+    },
+    {
+      "id": "FRESH7-003", "category": "answerable", "probe": "aggregation_wording",
+      "question": "What is the total gross sales for each sales channel?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Sales"}],
+        "group_by": ["FactSales[Channel]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[Channel],\n    \"Gross Sales\", [Gross Sales]\n)"
+    },
+    {
+      "id": "FRESH7-004", "category": "answerable", "probe": "aggregation_wording",
+      "question": "Count the distinct orders for each store region.",
+      "requirement": {
+        "metrics": [{"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    \"Distinct Orders\", DISTINCTCOUNT('FactSales'[OrderID])\n)"
+    },
+    {
+      "id": "FRESH7-005", "category": "answerable", "probe": "aggregation_wording",
+      "question": "Give me the sum of total discounts by quarter.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Total Discounts"}],
+        "group_by": ["DimDate[Quarter]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[Quarter],\n    \"Total Discounts\", [Total Discounts]\n)"
+    },
+    {
+      "id": "FRESH7-006", "category": "answerable", "probe": "aggregation_wording",
+      "question": "What is total net sales divided by total units sold for each product category?",
+      "requirement": {
+        "metrics": [{
+          "kind": "divide",
+          "numerator": {"kind": "measure", "name": "Net Sales"},
+          "denominator": {"kind": "measure", "name": "Units Sold"}
+        }],
+        "group_by": ["DimProduct[Category]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimProduct'[Category],\n    \"Net Sales per Unit\", DIVIDE([Net Sales], [Units Sold])\n)"
+    },
+    {
+      "id": "FRESH7-007", "category": "answerable", "probe": "aggregation_wording",
+      "question": "How many unique customers shopped in each store city?",
+      "requirement": {
+        "metrics": [{"kind": "distinct_count", "table": "FactSales", "column": "CustomerKey"}],
+        "group_by": ["DimStore[City]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[City],\n    \"Distinct Customers\", DISTINCTCOUNT('FactSales'[CustomerKey])\n)"
+    },
+    {
+      "id": "FRESH7-008", "category": "answerable", "probe": "aggregation_wording",
+      "question": "Show the total gross profit on weekend days by store region.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Profit"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [{"field": "DimDate[IsWeekend]", "operator": "eq", "value": true}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    TREATAS({TRUE()}, 'DimDate'[IsWeekend]),\n    \"Gross Profit\", [Gross Profit]\n)"
+    },
+    {
+      "id": "FRESH7-009", "category": "answerable", "probe": "aggregation_wording",
+      "question": "What is the total number of units sold to Member customers by age band?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimCustomer[AgeBand]"],
+        "column_filters": [{"field": "DimCustomer[CustomerSegment]", "operator": "eq", "value": "Member"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[AgeBand],\n    TREATAS({\"Member\"}, 'DimCustomer'[CustomerSegment]),\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH7-010", "category": "answerable", "probe": "general",
+      "question": "Show the top three product subcategories by total net sales.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimProduct[Subcategory]"],
+        "column_filters": [], "metric_filters": [],
+        "order_by": [{"metric": {"kind": "measure", "name": "Net Sales"}, "direction": "desc"}],
+        "limit": 3
+      },
+      "reference_dax": "EVALUATE\nTOPN(\n    3,\n    SUMMARIZECOLUMNS(\n        'DimProduct'[Subcategory],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales], DESC,\n    'DimProduct'[Subcategory], ASC\n)\nORDER BY [Net Sales] DESC, 'DimProduct'[Subcategory] ASC"
+    },
+    {
+      "id": "FRESH7-011", "category": "answerable", "probe": "general",
+      "question": "Show gross margin percentage by store region, highest first.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Margin %"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [],
+        "order_by": [{"metric": {"kind": "measure", "name": "Gross Margin %"}, "direction": "desc"}],
+        "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    \"Gross Margin %\", [Gross Margin %]\n)\nORDER BY [Gross Margin %] DESC"
+    },
+    {
+      "id": "FRESH7-012", "category": "answerable", "probe": "general",
+      "question": "Which months had total net sales above SAR 80,000?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimDate[YearMonth]"],
+        "column_filters": [],
+        "metric_filters": [{"metric": {"kind": "measure", "name": "Net Sales"}, "operator": "gt", "value": 80000}],
+        "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'DimDate'[YearMonth],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales] > 80000\n)"
+    },
+    {
+      "id": "FRESH7-013", "category": "answerable", "probe": "general",
+      "question": "What are the overall totals of gross sales, net sales and total discounts?",
+      "requirement": {
+        "metrics": [
+          {"kind": "measure", "name": "Gross Sales"},
+          {"kind": "measure", "name": "Net Sales"},
+          {"kind": "measure", "name": "Total Discounts"}
+        ],
+        "group_by": [],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nROW(\n    \"Gross Sales\", [Gross Sales],\n    \"Net Sales\", [Net Sales],\n    \"Total Discounts\", [Total Discounts]\n)"
+    },
+    {
+      "id": "FRESH7-014", "category": "empty_result", "probe": "general",
+      "question": "Which brands had total units sold below zero?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimProduct[Brand]"],
+        "column_filters": [],
+        "metric_filters": [{"metric": {"kind": "measure", "name": "Units Sold"}, "operator": "lt", "value": 0}],
+        "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'DimProduct'[Brand],\n        \"Units Sold\", [Units Sold]\n    ),\n    [Units Sold] < 0\n)"
+    },
+    {
+      "id": "FRESH7-015", "category": "unsupported",
+      "question": "What is the total marketing spend by sales channel?",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH7-016", "category": "unsupported",
+      "question": "Show the sum of customer complaints by store.",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH7-017", "category": "unsupported",
+      "question": "What is the total carbon footprint by product?",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH7-018", "category": "unsupported",
+      "question": "Show me the totals.",
+      "expected_reason": "ambiguous",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH7-019", "category": "unsupported",
+      "question": "Remove the duplicate orders from the sales table.",
+      "expected_reason": "write_request",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH7-020", "category": "unsupported",
+      "question": "Set up a weekly email of this report.",
+      "expected_reason": "out_of_scope",
+      "requirement": {"supported": false}
+    }
+  ]
+}
