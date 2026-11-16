@@ -9,7 +9,9 @@ out = st.components.v2.component(
             <style>
                 .component-root {
                     width: 100%;
-                    font-family: Arial, sans-serif;
+                    font-family: "Segoe UI Variable Text", "Segoe UI",
+                        system-ui, -apple-system, "Helvetica Neue", Arial,
+                        sans-serif;
                 }
 
                 .pbi-toolbar {
@@ -21,30 +23,52 @@ out = st.components.v2.component(
                 }
 
                 .pbi-login {
-                    background: #0078d4;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    padding: 10px 18px;
+                    background: #2251D1;
+                    color: #fff;
+                    border: 1px solid #2251D1;
+                    border-radius: 10px;
+                    padding: 9px 18px;
                     cursor: pointer;
+                    font: inherit;
                     font-size: 14px;
+                    font-weight: 600;
+                    line-height: 1.4;
+                    box-shadow: 0 1px 2px rgba(16, 24, 40, .08),
+                        0 6px 14px -8px rgba(34, 81, 209, .7);
+                    transition: background .15s, box-shadow .15s,
+                        transform .15s;
+                }
+
+                .pbi-login:hover:not(:disabled) {
+                    background: #1A3FA8;
+                    border-color: #1A3FA8;
+                    transform: translateY(-1px);
+                }
+
+                .pbi-login:focus-visible {
+                    outline: none;
+                    box-shadow: 0 0 0 3px rgba(34, 81, 209, .28);
                 }
 
                 .pbi-login:disabled {
-                    opacity: 0.6;
+                    background: #EEF1F7;
+                    border-color: #E4E7EC;
+                    color: #667085;
+                    box-shadow: none;
                     cursor: wait;
                 }
 
                 .pbi-status {
                     font-size: 13px;
-                    color: #666;
+                    color: #667085;
                 }
 
                 .pbi-report {
                     width: 100%;
                     height: 760px;
-                    border: 1px solid #ddd;
-                    border-radius: 5px;
+                    border: 1px solid #E4E7EC;
+                    border-radius: 12px;
+                    background: #FAFBFD;
                     overflow: hidden;
                 }
             </style>
