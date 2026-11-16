@@ -355,3 +355,32 @@ def test_fresh_v3_requirement_validates_and_compiles(case):
     validate_query_plan(plan)
     compile_query_plan(plan)
     assert check_requirement_coverage(plan, case["requirement"])["covered"]
+
+
+# ------------------------------------------------------------------
+# Fourth fresh set (fresh_v4)
+# ------------------------------------------------------------------
+
+CASES_V4 = fresh.load_cases(fresh.resolve_paths("fresh_v4", "v4")["cases"])
+SUPPORTED_V4 = [case for case in CASES_V4 if case["category"] in fresh.ANSWERABLE]
+
+
+def test_fresh_v4_shape_and_independence():
+    assert len(SUPPORTED_V4) == 16
+    unsupported = [case for case in CASES_V4 if case["category"] == "unsupported"]
+    assert len(unsupported) == 4
+    earlier = {case["question"].casefold()
+               for case in CASES + CASES_V2 + CASES_V3}
+    assert not earlier & {case["question"].casefold() for case in CASES_V4}
+
+
+@pytest.mark.parametrize("case", SUPPORTED_V4, ids=lambda case: case["id"])
+def test_fresh_v4_requirement_validates_compiles_and_passes_semantics(case):
+    from evaluation.semantic_checks import check_semantic_rules
+
+    assert case["reference_dax"].lstrip().startswith("EVALUATE")
+    plan = canonical_plan(case["requirement"])
+    validate_query_plan(plan)
+    check_semantic_rules(plan)
+    compile_query_plan(plan)
+    assert check_requirement_coverage(plan, case["requirement"])["covered"]
