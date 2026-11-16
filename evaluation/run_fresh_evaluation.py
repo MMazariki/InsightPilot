@@ -65,21 +65,30 @@ SETS = {
     "fresh_v2": "fresh_cases_v2.json",
     "fresh_v3": "fresh_cases_v3.json",
     "fresh_v4": "fresh_cases_v4.json",
+    "fresh_v5": "fresh_cases_v5.json",
 }
-PROMPTS = ("v1", "v2", "v3", "v4")
+PROMPTS = ("v1", "v2", "v3", "v4", "v5")
 # Prompts whose pipeline adds semantic checks and one validator-feedback
 # repair attempt for rejected plans.
-REPAIR_PROMPTS = {"v4"}
+REPAIR_PROMPTS = {"v4", "v5"}
 REPAIR_INSTRUCTION = (
     "Your previous response was rejected: {error}\n"
     "Return a corrected JSON object: either a query plan that fixes this "
     "problem or a clarification object. Return JSON only."
 )
 
+
+def semantic_level(prompt):
+    """Semantic checks per pipeline: none (v1-v3), v4 rules, v4 + rule 3."""
+
+    if prompt == "v5":
+        return "v5"
+    return prompt in REPAIR_PROMPTS
+
 # Comparator per case set is fixed so every arm on a set is scored by the same
 # rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
 # sets tolerate several renamed metrics (values remain strict).
-MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4"}
+MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5"}
 
 
 def comparators_for(set_name):
@@ -230,7 +239,7 @@ def plan_record(case, model, raw, prompt="v1"):
             record["status"] = "valid_plan"
         else:
             parsed = parse_planner_response(
-                payload, semantic_checks=prompt in REPAIR_PROMPTS)
+                payload, semantic_checks=semantic_level(prompt))
             if parsed["kind"] == "plan":
                 record["status"] = "valid_plan"
             else:
@@ -329,6 +338,7 @@ def generate_plans(paths, prompt="v1"):
         "prompt_version": prompt,
         "request_guard": use_guard,
         "semantic_checks_and_repair": prompt in REPAIR_PROMPTS,
+        "semantic_level": semantic_level(prompt),
         "prompt_sha256": hashlib.sha256(instructions.encode("utf-8")).hexdigest(),
         "num_ctx": NUM_CTX,
         "temperature": 0,

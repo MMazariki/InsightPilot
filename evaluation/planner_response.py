@@ -67,7 +67,11 @@ def parse_planner_response(raw, semantic_checks=False):
     if semantic_checks:
         # Run first: its messages are more actionable for repair (e.g. it
         # lists allowed values where the validator only reports a type error).
-        check_semantic_rules(payload)
+        # semantic_checks=True -> pipeline v4 rules; "v5" adds rule 3.
+        check_semantic_rules(
+            payload,
+            reject_single_value_grouping=(semantic_checks == "v5"),
+        )
     validate_query_plan(payload)
     return {"kind": "plan", "plan": payload}
 

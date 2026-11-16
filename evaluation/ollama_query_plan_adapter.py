@@ -67,6 +67,8 @@ PROMPT_FILES = {
     "v2": "query_plan_prompt_v2.txt",
     "v3": "query_plan_prompt_v3.txt",
     "v4": "query_plan_prompt_v4.txt",
+    # v5 changes the pipeline (semantic rule 3), not the prompt text.
+    "v5": "query_plan_prompt_v4.txt",
 }
 
 

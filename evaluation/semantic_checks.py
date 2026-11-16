@@ -54,11 +54,40 @@ def _distinct_counts(expression):
         yield from _distinct_counts(expression.get("denominator"))
 
 
-def check_semantic_rules(plan, catalog=None, model=None):
-    """Raise ``ValueError`` with an actionable message, else return plan."""
+def check_semantic_rules(plan, catalog=None, model=None,
+                         reject_single_value_grouping=False):
+    """Raise ``ValueError`` with an actionable message, else return plan.
+
+    ``reject_single_value_grouping`` enables rule 3 (pipeline v5): a column
+    that is filtered to one value with ``eq`` must not also be grouped by,
+    because the grouping only adds a constant column. ``ne`` filters are
+    unaffected ("by channel, excluding Delivery" is legitimate).
+    """
 
     catalog = load_catalog() if catalog is None else catalog
     model = load_model() if model is None else model
+
+    # Rule 3 (optional): grouping by a column filtered to a single value.
+    if reject_single_value_grouping:
+        grouped = {
+            f"{item.get('table')}[{item.get('column')}]"
+            for item in (plan.get("group_by", []) or [])
+            if isinstance(item, dict)
+        }
+        for condition in plan.get("filters", []) or []:
+            if (not isinstance(condition, dict)
+                    or condition.get("type") != "column"
+                    or condition.get("operator") != "eq"):
+                continue
+            field = f"{condition.get('table')}[{condition.get('column')}]"
+            if field in grouped:
+                raise ValueError(
+                    f"The plan groups by {field} while filtering it to the "
+                    f"single value {condition.get('value')!r}, which only adds "
+                    f"a constant column. Remove {field} from group_by and keep "
+                    f"the filter, unless the user asked to compare several "
+                    f"{condition.get('column')} values."
+                )
 
     # Rule 1: filter values must exist.
     for condition in plan.get("filters", []) or []:

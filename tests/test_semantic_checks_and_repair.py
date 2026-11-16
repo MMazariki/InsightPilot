@@ -243,3 +243,73 @@ def test_resolve_paths_v4_arm_uses_multi_alias():
     assert paths["plans"].name == "fresh_v4_prompt_v4_query_plans.json"
     assert fresh.comparators_for("fresh_v4")[0].__name__ == (
         "compare_results_with_metric_aliases")
+
+
+# ------------------------------------------------------------------
+# Rule 3 (pipeline v5): grouping by a single-value filtered column
+# ------------------------------------------------------------------
+
+def quarter_by_channel(operator="eq", group_quarter=True):
+    group_by = [{"table": "FactSales", "column": "Channel"}]
+    if group_quarter:
+        group_by.append({"table": "DimDate", "column": "Quarter"})
+    return plan(group_by=group_by,
+                filters=[column_filter("DimDate", "Quarter", "Q2", operator)])
+
+
+def test_rule3_off_by_default_keeps_v4_behaviour():
+    candidate = quarter_by_channel()
+    assert check_semantic_rules(candidate) is candidate
+
+
+def test_rule3_rejects_grouping_by_single_value_filter():
+    # Shape of FRESH4-001 (both models, v4): Q2 filter plus Quarter grouping.
+    with pytest.raises(ValueError, match="Remove DimDate\[Quarter\] from group_by"):
+        check_semantic_rules(quarter_by_channel(),
+                             reject_single_value_grouping=True)
+
+
+def test_rule3_allows_ne_filter_on_grouped_column():
+    candidate = quarter_by_channel(operator="ne")
+    assert check_semantic_rules(candidate,
+                                reject_single_value_grouping=True) is candidate
+
+
+def test_rule3_allows_filter_without_grouping():
+    candidate = quarter_by_channel(group_quarter=False)
+    assert check_semantic_rules(candidate,
+                                reject_single_value_grouping=True) is candidate
+
+
+def test_parser_levels():
+    payload = json.dumps(quarter_by_channel())
+    assert parse_planner_response(payload, semantic_checks=True)["kind"] == "plan"
+    with pytest.raises(ValueError, match="constant column"):
+        parse_planner_response(payload, semantic_checks="v5")
+
+
+def test_runner_semantic_levels():
+    assert fresh.semantic_level("v3") is False
+    assert fresh.semantic_level("v4") is True
+    assert fresh.semantic_level("v5") == "v5"
+    payload = json.dumps(quarter_by_channel())
+    assert fresh.plan_record(CASE, "m", payload, "v4")["status"] == "valid_plan"
+    assert fresh.plan_record(CASE, "m", payload, "v5")["status"] == "invalid_plan"
+
+
+def test_v5_prompt_text_identical_to_v4():
+    assert build_instructions("v5") == build_instructions("v4")
+
+
+def test_rule3_accepts_all_earlier_correct_plans():
+    from tests.test_requirement_coverage import canonical_plan
+
+    count = 0
+    for name in ("fresh_v1", "fresh_v2", "fresh_v3", "fresh_v4"):
+        for case in fresh.load_cases(fresh.resolve_paths(name, "v1")["cases"]):
+            if case["category"] == "unsupported":
+                continue
+            check_semantic_rules(canonical_plan(case["requirement"]),
+                                 reject_single_value_grouping=True)
+            count += 1
+    assert count == 57
