@@ -1,7 +1,25 @@
+import os
+
 import streamlit as st
 
-from src.powerbi_agent import PowerBIAgent
 from powerbi_embed_component import powerbi_embed_component
+
+
+# Agent selection. "foundry" (default) keeps the original Azure AI Foundry
+# agent; "structured" uses the local structured-planning pipeline
+# (src/structured_agent.py: local Ollama + validated plans + read-only DAX).
+AGENT_MODE = os.environ.get("INSIGHTPILOT_AGENT", "foundry").strip().lower()
+
+
+def create_agent():
+    if AGENT_MODE == "structured":
+        from src.structured_agent import StructuredPlanningAgent
+
+        return StructuredPlanningAgent()
+
+    from src.powerbi_agent import PowerBIAgent
+
+    return PowerBIAgent()
 
 
 st.set_page_config(
@@ -32,7 +50,11 @@ if "visual_request" not in st.session_state:
 st.title("AgenticProject")
 st.caption(
     "AI-powered Business Intelligence | "
-    "Azure AI Foundry + Power BI"
+    + (
+        "Local structured planning + Power BI"
+        if AGENT_MODE == "structured"
+        else "Azure AI Foundry + Power BI"
+    )
 )
 
 st.divider()
@@ -90,7 +112,7 @@ with chat_column:
             try:
 
                 if st.session_state.agent is None:
-                    st.session_state.agent = PowerBIAgent()
+                    st.session_state.agent = create_agent()
 
                 answer = st.session_state.agent.ask(prompt)
                 if st.session_state.agent.pending_visual_request:

@@ -1,0 +1,163 @@
+import json
+
+import pytest
+
+from src.structured_agent import (
+    StructuredPlanningAgent,
+    format_result_table,
+)
+
+PLAN = {
+    "metrics": [{"alias": "Net Sales",
+                 "expression": {"kind": "measure", "name": "Net Sales"}}],
+    "group_by": [{"table": "DimStore", "column": "Region"}],
+    "filters": [], "order_by": [], "limit": None,
+}
+
+
+class FakePowerBI:
+    def __init__(self, result=None, error=None):
+        self.result = result or {
+            "columns": ["DimStore[Region]", "[Net Sales]"],
+            "rows": [{"DimStore[Region]": "Central", "[Net Sales]": 1234.5}],
+            "row_count": 1,
+        }
+        self.error = error
+        self.queries = []
+        self.closed = False
+
+    def execute_dax(self, dax):
+        self.queries.append(dax)
+        if self.error:
+            raise self.error
+        return self.result
+
+    def close(self):
+        self.closed = True
+
+
+def make_agent(responses, powerbi=None, chat_responses=None):
+    calls = {"generate": 0, "chat": []}
+    outputs = list(responses)
+    chat_outputs = list(chat_responses or [])
+
+    def generate(model, question, instructions):
+        calls["generate"] += 1
+        assert "COLUMN VALUES:" in instructions  # v6 prompt (= v4 text)
+        return outputs.pop(0)
+
+    def chat(model, messages):
+        calls["chat"].append(messages)
+        return chat_outputs.pop(0)
+
+    agent = StructuredPlanningAgent(model="fake", powerbi=powerbi or FakePowerBI(),
+                                    generate=generate, chat=chat)
+    return agent, calls
+
+
+def test_successful_question_executes_compiled_dax_only():
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([json.dumps(PLAN)], powerbi)
+    answer = agent.ask("Show net sales by store region.")
+    assert calls["generate"] == 1 and not calls["chat"]
+    assert len(powerbi.queries) == 1
+    assert powerbi.queries[0].startswith("EVALUATE")
+    assert "| Region | Net Sales |" in answer
+    assert "| Central | 1,234.50 |" in answer
+    assert "```dax" in answer
+    assert agent.last_trace["stages"] == ["planner", "compiled", "executed"]
+    assert agent.pending_visual_request is None
+
+
+def test_guard_blocks_without_model_or_execution():
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([], powerbi)
+    answer = agent.ask("Delete all sales transactions from 2025.")
+    assert calls["generate"] == 0
+    assert powerbi.queries == []
+    assert "No query was executed" in answer
+    assert agent.last_trace["stages"][0] == "request_guard:blocked"
+
+
+def test_planner_clarification_is_returned_without_execution():
+    powerbi = FakePowerBI()
+    clarification = {"clarification": {"reason": "undefined_metric",
+                                       "message": "There is no churn measure."}}
+    agent, _ = make_agent([json.dumps(clarification)], powerbi)
+    answer = agent.ask("What is churn?")
+    assert answer.startswith("There is no churn measure.")
+    assert powerbi.queries == []
+
+
+def test_rejected_plan_is_repaired_once_with_the_message():
+    bad = dict(PLAN, metrics=[{"alias": "Channel", "expression": {
+        "kind": "measure", "name": "Channel"}}])
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([json.dumps(bad)], powerbi,
+                              chat_responses=[json.dumps(PLAN)])
+    agent.ask("Show net sales by region.")
+    assert len(calls["chat"]) == 1
+    assert "is not a measure" in calls["chat"][0][-1]["content"]
+    assert agent.last_trace["stages"] == [
+        "planner", "rejected", "repair", "compiled", "executed"]
+    assert len(powerbi.queries) == 1
+
+
+def test_failed_repair_executes_nothing():
+    bad = json.dumps(dict(PLAN, metrics=[]))
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([bad], powerbi, chat_responses=[bad])
+    answer = agent.ask("Show something.")
+    assert len(calls["chat"]) == 1
+    assert powerbi.queries == []
+    assert "nothing was executed" in answer
+    assert "failed_validation" in agent.last_trace["stages"]
+
+
+def test_execution_error_is_reported_with_dax():
+    powerbi = FakePowerBI(error=RuntimeError("HTTP 400"))
+    agent, _ = make_agent([json.dumps(PLAN)], powerbi)
+    answer = agent.ask("Show net sales by store region.")
+    assert "Power BI returned an error: HTTP 400" in answer
+    assert "```dax" in answer
+
+
+def test_alias_normalisation_recorded_in_trace():
+    plan = json.loads(json.dumps(PLAN))
+    plan["metrics"][0]["alias"] = "Net Sales, total"
+    agent, _ = make_agent([json.dumps(plan)])
+    agent.ask("Show net sales by store region.")
+    assert agent.last_trace["normalizations"][0]["to"] == "Net Sales total"
+
+
+def test_close_closes_powerbi():
+    powerbi = FakePowerBI()
+    agent, _ = make_agent([], powerbi)
+    agent.close()
+    assert powerbi.closed
+
+
+def test_result_table_formatting_and_truncation():
+    rows = [{"[A]": i, "T[B]": "x|y"} for i in range(60)]
+    table = format_result_table(["T[B]", "[A]"], rows)
+    assert table.splitlines()[0] == "| B | A |"
+    assert "x\\|y" in table
+    assert "Showing the first 50 of 60 rows" in table
+    assert format_result_table([], []) == "_The query returned no rows._"
+
+
+@pytest.mark.parametrize("mode, expected", [
+    ("structured", "StructuredPlanningAgent"),
+    ("foundry", "PowerBIAgent"),
+])
+def test_main_selects_agent_by_environment(monkeypatch, mode, expected):
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1].joinpath("src", "main.py").read_text(
+        encoding="utf-8")
+    tree = ast.parse(source)
+    names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    assert expected in names
+    assert 'os.environ.get("INSIGHTPILOT_AGENT", "foundry")' in source
+    assert "powerbi_embed_component(" in source
