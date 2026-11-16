@@ -54,3 +54,6 @@ evaluation/results/
 
 # InsightPilot launcher runtime files
 logs/
+
+# Admin settings and encrypted API keys (per machine)
+config/

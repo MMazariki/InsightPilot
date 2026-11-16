@@ -7,6 +7,8 @@ import requests
 import streamlit as st
 
 from powerbi_embed_component import powerbi_embed_component
+from src import admin_page, agent_factory
+from src import settings as app_settings
 
 
 APP_NAME = "InsightPilot"
@@ -18,25 +20,34 @@ ICON_FILE = ASSETS / "insightpilot.png"
 # (src/structured_agent.py: local Ollama + validated plans + read-only DAX).
 AGENT_MODE = os.environ.get("INSIGHTPILOT_AGENT", "foundry").strip().lower()
 
+# Admin settings (src/settings.py). Read on every run, so a saved change
+# applies to the next question without restarting the server.
+SETTINGS = app_settings.load()
+if SETTINGS["agent"]["mode"] != "launcher":
+    AGENT_MODE = SETTINGS["agent"]["mode"]
+
+# Voice input (src/voice.py, when installed) reads these.
+VOICE_INSTALLED = Path(__file__).with_name("voice.py").exists()
+os.environ["INSIGHTPILOT_VOICE_AUTOSEND"] = (
+    "1" if SETTINGS["voice"]["autosend"] else "0")
+os.environ["INSIGHTPILOT_VOICE_MODEL"] = SETTINGS["voice"]["model"]
+
 DETAILS_MARKER = "**Query plan and DAX**"
 FOOTER_MARKER = "_Structured pipeline"
 
-STARTER_QUESTIONS = [
-    "Show gross profit by sales channel.",
-    "Compare net sales across store types.",
-    "Which channel sold the most units?",
-    "Margin % by customer segment.",
-]
+STARTER_QUESTIONS = SETTINGS["interface"]["starter_questions"]
 
 
 def create_agent():
     if AGENT_MODE == "structured":
         from src.structured_agent import StructuredPlanningAgent
 
-        return StructuredPlanningAgent()
+        return StructuredPlanningAgent(
+            **agent_factory.structured_agent_kwargs(SETTINGS))
 
     from src.powerbi_agent import PowerBIAgent
 
+    agent_factory.apply_foundry_overrides(SETTINGS)
     return PowerBIAgent()
 
 
@@ -115,7 +126,7 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
 .ip-dot.bad { background: #F97066; box-shadow: 0 0 0 3px rgba(249, 112, 102, .22); }
 
 /* Cards */
-.st-key-chat_card, .st-key-report_card {
+.st-key-chat_card, .st-key-report_card, .st-key-admin_card {
     background: var(--ip-surface);
     border: 1px solid var(--ip-line) !important;
     border-radius: 16px !important;
@@ -177,6 +188,11 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
 .st-key-starters button p { font-size: .9rem; }
 
 /* Buttons and input */
+.st-key-open_admin button {
+    border-radius: 10px; border: 1px solid var(--ip-line);
+    color: #475467; background: #fff; padding-left: 0; padding-right: 0;
+}
+.st-key-open_admin button:hover { border-color: var(--ip-blue); color: var(--ip-blue); }
 .st-key-new_chat button {
     border-radius: 10px; border: 1px solid var(--ip-line);
     color: #344054; font-weight: 500; background: #fff;
@@ -195,6 +211,7 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
     border-radius: 10px; border-color: var(--ip-line); background: #FAFBFD;
 }
 [data-testid="stExpander"] summary p { font-size: .85rem; color: #475467; }
+.st-key-admin_card h3 { font-size: 1.08rem; font-weight: 650; padding-top: .9rem; }
 .ip-foot { text-align: center; color: #98A2B3; font-size: .76rem; margin-top: 10px; }
 </style>
 """
@@ -227,6 +244,20 @@ if "visual_request" not in st.session_state:
     st.session_state.visual_request = None
 if "queued_prompt" not in st.session_state:
     st.session_state.queued_prompt = None
+if "view" not in st.session_state:
+    st.session_state.view = (
+        "admin" if st.query_params.get("view") == "admin" else "chat")
+
+# Rebuild the agent when the saved settings or API keys change.
+SETTINGS_STAMP = app_settings.stamp()
+if st.session_state.get("settings_stamp") != SETTINGS_STAMP:
+    if st.session_state.agent is not None:
+        try:
+            st.session_state.agent.close()
+        except Exception:
+            pass
+        st.session_state.agent = None
+    st.session_state.settings_stamp = SETTINGS_STAMP
 
 
 def queue_prompt(question):
@@ -238,11 +269,15 @@ def reset_conversation():
     st.session_state.visual_request = None
 
 
+def open_admin():
+    st.session_state.view = "admin"
+
+
 @st.cache_data(ttl=20, show_spinner=False)
-def local_model_online():
+def local_model_online(base_url):
     try:
         return requests.get(
-            "http://localhost:11434/api/tags", timeout=1.5
+            base_url.rstrip("/") + "/api/tags", timeout=1.5
         ).ok
     except requests.RequestException:
         return False
@@ -261,6 +296,8 @@ def render_answer(content):
         details, footer = rest, ""
 
     st.markdown(body.strip())
+    if not SETTINGS["interface"]["show_query_details"]:
+        return
     with st.expander("How this was answered: query plan and DAX"):
         st.markdown(details.strip())
         if footer:
@@ -272,14 +309,28 @@ def render_answer(content):
 # =====================================================
 
 if AGENT_MODE == "structured":
-    from src.structured_agent import DEFAULT_MODEL, PIPELINE_VERSION
+    from src.structured_agent import PIPELINE_VERSION
 
-    model_name = os.environ.get("INSIGHTPILOT_PLANNER_MODEL", DEFAULT_MODEL)
-    online = local_model_online()
+    planner_settings = SETTINGS["planner"]
+    model_name = planner_settings["model"]
+    if planner_settings["provider"] == "ollama":
+        online = local_model_online(planner_settings["base_url"])
+        model_pill = (
+            f'<span class="ip-pill"><span class="ip-dot {"ok" if online else "bad"}">'
+            f'</span>Local model {"online" if online else "offline"} · {model_name}</span>'
+        )
+    else:
+        online = True
+        model_pill = (
+            '<span class="ip-pill"><span class="ip-dot ok"></span>'
+            f'Cloud model · {model_name}</span>'
+        )
     pills = (
-        f'<span class="ip-pill"><span class="ip-dot {"ok" if online else "bad"}">'
-        f'</span>Local model {"online" if online else "offline"} · {model_name}</span>'
-        f'<span class="ip-pill">Pipeline {PIPELINE_VERSION}</span>'
+        model_pill
+        + f'<span class="ip-pill">Pipeline {PIPELINE_VERSION}'
+        + ("" if SETTINGS["pipeline"] == app_settings.DEFAULTS["pipeline"]
+           else " · custom checks")
+        + '</span>'
         '<span class="ip-pill">Read-only Power BI</span>'
     )
     tagline = "Ask your sales data in plain language. Answers come from validated, read-only queries."
@@ -316,6 +367,18 @@ if not online:
 
 
 # =====================================================
+# ADMIN PAGE
+# =====================================================
+
+if st.session_state.view == "admin":
+    with st.container(border=True, key="admin_card"):
+        settings_saved = admin_page.render(AGENT_MODE, VOICE_INSTALLED)
+    if settings_saved:
+        st.rerun()
+    st.stop()
+
+
+# =====================================================
 # MAIN LAYOUT
 # =====================================================
 
@@ -331,7 +394,8 @@ chat_column, report_column = st.columns(
 
 with chat_column, st.container(border=True, key="chat_card"):
 
-    title_column, action_column = st.columns([3, 1], vertical_alignment="center")
+    title_column, action_column, admin_column = st.columns(
+        [3, 1, 0.34], vertical_alignment="center")
     with title_column:
         st.html(
             '<div class="ip-card-title">Ask InsightPilot</div>'
@@ -347,8 +411,19 @@ with chat_column, st.container(border=True, key="chat_card"):
             disabled=not st.session_state.messages,
             use_container_width=True,
         )
+    with admin_column:
+        st.button(
+            "",
+            key="open_admin",
+            icon=":material/settings:",
+            help="Admin settings: models, checks, Power BI, interface",
+            on_click=open_admin,
+            use_container_width=True,
+        )
 
-    chat_container = st.container(height=735, border=False, key="chat_scroll")
+    chat_container = st.container(
+        height=SETTINGS["interface"]["chat_height"], border=False,
+        key="chat_scroll")
 
     prompt = st.chat_input(
         "Ask a business question...",
@@ -370,7 +445,7 @@ with chat_column, st.container(border=True, key="chat_card"):
   <p>Ask in your own words. InsightPilot plans a query, checks it,
      and reads the answer from Power BI.</p>
 </div>
-<div class="ip-try">Try one of these</div>
+{'<div class="ip-try">Try one of these</div>' if STARTER_QUESTIONS else ''}
 """
             )
             with st.container(key="starters"):
@@ -454,9 +529,14 @@ with report_column, st.container(border=True, key="report_card"):
     powerbi_embed_component(
         key="main-powerbi-report",
         visual_request=st.session_state.visual_request,
+        report_id=SETTINGS["powerbi"]["report_id"] or None,
+        page_id=SETTINGS["powerbi"]["page_id"] or None,
     )
 
 st.html(
-    f'<div class="ip-foot">{APP_NAME} · runs on this computer · '
-    "queries are read-only</div>"
+    f'<div class="ip-foot">{APP_NAME} · '
+    + ("questions are sent to a cloud model · "
+       if AGENT_MODE != "structured" or app_settings.uses_cloud(SETTINGS)
+       else "runs on this computer · ")
+    + "queries are read-only</div>"
 )

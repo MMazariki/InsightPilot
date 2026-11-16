@@ -60,7 +60,8 @@ def _column_label(name: str) -> str:
     return name
 
 
-def format_result_table(columns: list[str], rows: list[dict]) -> str:
+def format_result_table(columns: list[str], rows: list[dict],
+                        max_rows: int = MAX_TABLE_ROWS) -> str:
     if not rows:
         return "_The query returned no rows._"
 
@@ -68,12 +69,25 @@ def format_result_table(columns: list[str], rows: list[dict]) -> str:
     divider = "| " + " | ".join("---" for _ in columns) + " |"
     body = [
         "| " + " | ".join(_format_value(row.get(c)) for c in columns) + " |"
-        for row in rows[:MAX_TABLE_ROWS]
+        for row in rows[:max_rows]
     ]
     table = "\n".join([header, divider, *body])
-    if len(rows) > MAX_TABLE_ROWS:
-        table += f"\n\n_Showing the first {MAX_TABLE_ROWS} of {len(rows)} rows._"
+    if len(rows) > max_rows:
+        table += f"\n\n_Showing the first {max_rows} of {len(rows)} rows._"
     return table
+
+
+# Switches the Admin page can change. The defaults are pipeline v11 exactly
+# as measured in docs/EVALUATION.md.
+DEFAULT_OPTIONS = {
+    "request_guard": True,
+    "repair_turn": True,
+    "answerability_check": True,
+    "no_metric_trigger": True,
+    "strict_metric_words": False,
+    "verifier_fail_closed": False,
+    "max_table_rows": MAX_TABLE_ROWS,
+}
 
 
 class StructuredPlanningAgent:
@@ -85,7 +99,11 @@ class StructuredPlanningAgent:
         powerbi: Any | None = None,
         generate: Callable[[str, str, str], str] | None = None,
         chat: Callable[[str, list[dict]], str] | None = None,
+        options: dict[str, Any] | None = None,
+        verifier_chat: Callable[[str, list[dict]], str] | None = None,
+        verifier_model: str | None = None,
     ):
+        self.options = {**DEFAULT_OPTIONS, **(options or {})}
         self.model = model or os.environ.get(
             "INSIGHTPILOT_PLANNER_MODEL", DEFAULT_MODEL)
         if powerbi is None:
@@ -95,6 +113,9 @@ class StructuredPlanningAgent:
         self.powerbi = powerbi
         self.generate = generate or generate_plan
         self.chat = chat or generate_messages
+        # The answerability verifier may use a different model.
+        self.verifier_chat = verifier_chat or self.chat
+        self.verifier_model = verifier_model or self.model
         self.instructions = build_instructions(PIPELINE_VERSION)
         # This agent never authors visuals; the embedded report is untouched.
         self.pending_visual_request: dict[str, Any] | None = None
@@ -111,7 +132,8 @@ class StructuredPlanningAgent:
         """Return a parsed response: plan or clarification. Raises
         ``ValueError`` if no valid response is obtained after one repair."""
 
-        blocked = screen_request(question)
+        blocked = (screen_request(question)
+                   if self.options["request_guard"] else None)
         if blocked is not None:
             trace["stages"].append("request_guard:blocked")
             detail = blocked["clarification"]
@@ -125,6 +147,8 @@ class StructuredPlanningAgent:
         except ValueError as first_error:
             trace["stages"].append("rejected")
             trace["first_error"] = str(first_error)
+            if not self.options["repair_turn"]:
+                raise
             LOGGER.info("[%s] plan rejected, repairing: %s",
                         trace["trace_id"], first_error)
             messages = [
@@ -138,9 +162,20 @@ class StructuredPlanningAgent:
             trace["stages"].append("repair")
             response = self._parse(repaired)
 
-        if response["kind"] == "plan":
-            result = gate(question, response["plan"], self.chat, self.model,
-                          require_metric_reference=True)
+        if response["kind"] == "plan" and self.options["answerability_check"]:
+            result = gate(
+                question, response["plan"], self.verifier_chat,
+                self.verifier_model,
+                require_metric_reference=self.options["no_metric_trigger"],
+                strict_metric_words=self.options["strict_metric_words"])
+            unusable = bool((result["verdict"] or {}).get("verifier_error"))
+            if unusable and self.options["verifier_fail_closed"]:
+                trace["stages"].append("answerability:unverified")
+                return {"kind": "clarification", "reason": "undefined_metric",
+                        "message": (
+                            "I couldn't confirm that my query answers this "
+                            "question, so I did not run it. Please rephrase, "
+                            "naming the measure and the breakdown you want.")}
             if result["verdict"] is not None:
                 trace["stages"].append(
                     "answerability:" + ("pass" if result["passed"] else "blocked"))
@@ -212,7 +247,8 @@ class StructuredPlanningAgent:
                     result["row_count"])
 
         return "\n\n".join([
-            format_result_table(result["columns"], result["rows"]),
+            format_result_table(result["columns"], result["rows"],
+                                self.options["max_table_rows"]),
             "**Query plan and DAX**\n\n"
             f"```json\n{json.dumps(plan, indent=2)}\n```\n\n"
             f"```dax\n{dax}\n```",

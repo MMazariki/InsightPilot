@@ -88,11 +88,20 @@ out = st.components.v2.component(
 )
 
 
+DEFAULT_REPORT_ID = "59c7816e-28a0-489c-ac5d-54c2df8250c3"
+DEFAULT_PAGE_ID = "84e6ab1c3d09669a719b"
+
+
 def powerbi_embed_component(
     key="powerbi-report",
     visual_request=None,
+    report_id=None,
+    page_id=None,
 ):
-    """Display the authenticated Power BI report and accept visual requests."""
+    """Display the authenticated Power BI report and accept visual requests.
+
+    ``report_id`` / ``page_id`` override the built-in report (Admin page).
+    """
 
     return out(
         key=key,
@@ -100,8 +109,8 @@ def powerbi_embed_component(
             "clientId": "3a9f7d57-1c7c-4c6a-9ca7-f2b4189c257e",
             "tenantId": "ed1297fe-5664-4236-a596-1c89e6f498b7",
             "redirectUri": "http://localhost:8501",
-            "reportId": "59c7816e-28a0-489c-ac5d-54c2df8250c3",
-            "pageId": "84e6ab1c3d09669a719b",
+            "reportId": report_id or DEFAULT_REPORT_ID,
+            "pageId": page_id or DEFAULT_PAGE_ID,
             "visualRequest": visual_request,
         },
     )

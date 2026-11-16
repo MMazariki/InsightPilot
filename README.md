@@ -18,6 +18,35 @@ background while you are signed in to Windows.
 The app address is <http://localhost:8501>. It is reachable from this
 computer only.
 
+## Admin settings
+
+The gear button next to "New chat" (or <http://localhost:8501/?view=admin>)
+opens the Admin page. Saved changes apply to the next question; no restart
+is needed.
+
+| Tab | What you can change |
+|---|---|
+| **Models** | Which assistant answers; the planner model and, separately, the verifier model. Each can be a local Ollama model, any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, LM Studio ...) or Anthropic Claude. Per model: name, service address, API key, timeout, output-token limit, temperature, top-p, seed, context window and keep-loaded time (Ollama), JSON mode, token-limit parameter and reasoning effort (OpenAI-compatible), effort and refusal fallback (Claude). A Test button sends one tiny request. |
+| **Answer checks** | Refuse data-changing requests, the one-time repair turn, the answerability check and its two triggers, what happens when the verifier's reply is unusable, rows shown per answer. |
+| **Power BI** | Dataset, workspace, sign-in account, the report and page shown on the right, timeout. |
+| **Interface** | Starter questions, chat panel height, whether the query plan and DAX are shown. |
+| **Voice** | Auto-send and speech model (used once voice input is installed). |
+
+Things to know:
+
+* Settings are saved in `config\settings.json`. API keys are saved
+  separately in `config\secrets.bin`, encrypted for your Windows account.
+  Neither file is committed.
+* The accuracy measured in `docs/EVALUATION.md` applies only to the default
+  settings. The page tells you when you have moved away from them, and
+  "Reset all to defaults" brings them back.
+* With a cloud model, each question and the data model's table, column and
+  measure names (plus sample column values) are sent to that provider and
+  billed per use. Query results are never sent to any model.
+* A chat subscription (ChatGPT Plus, Claude Pro) does not include API
+  access; you need an API key from the provider's developer console.
+* The page has no password. The app is only reachable from this computer.
+
 ## One-time setup
 
 In PowerShell, from the project folder:

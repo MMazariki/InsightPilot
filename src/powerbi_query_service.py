@@ -35,19 +35,34 @@ class PowerBIQueryService:
         "https://analysis.windows.net/powerbi/api/Dataset.Read.All"
     ]
 
-    def __init__(self):
+    # Defaults for instances built without __init__ (as the tests do).
+    timeout_seconds = 60
+    username = None
+
+    def __init__(
+        self,
+        dataset_id: str | None = None,
+        workspace_id: str | None = None,
+        username: str | None = None,
+        timeout_seconds: int = 60,
+    ):
+        # Arguments come from the Admin page; when empty, the environment
+        # variables and built-in defaults apply as before.
 
         self.tenant_id = os.environ.get("ENTRA_TENANT_ID")
         self.client_id = os.environ.get("ENTRA_CLIENT_ID")
 
-        self.dataset_id = os.environ.get(
+        self.dataset_id = dataset_id or os.environ.get(
             "POWERBI_DATASET_ID",
             "f1e8ea4d-1f1e-4c62-aedd-60a59d3ae929",
         )
 
-        self.workspace_id = os.environ.get(
+        self.workspace_id = workspace_id or os.environ.get(
             "POWERBI_WORKSPACE_ID"
         )
+
+        self.username = username or os.environ.get("ENTRA_USERNAME")
+        self.timeout_seconds = timeout_seconds
 
         if not self.tenant_id or not self.client_id:
             raise RuntimeError(
@@ -110,9 +125,7 @@ class PowerBIQueryService:
 
         accounts = self.msal_app.get_accounts()
 
-        preferred_username = os.environ.get(
-            "ENTRA_USERNAME"
-        )
+        preferred_username = self.username
 
         account = None
 
@@ -206,7 +219,7 @@ class PowerBIQueryService:
                 self.api_url,
                 headers=headers,
                 json=body,
-                timeout=60,
+                timeout=self.timeout_seconds,
             )
 
         except requests.RequestException as exc:

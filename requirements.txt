@@ -2,3 +2,4 @@ mcp[cli]>=2,<3
 msal
 msal-extensions
 requests
+anthropic>=2,<3

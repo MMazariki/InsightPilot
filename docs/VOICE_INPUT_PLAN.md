@@ -27,7 +27,7 @@ Decisions already made (do not change):
 | Recording | Streamlit's built-in `st.chat_input(accept_audio=True)` | Already in the installed Streamlit 1.67. No custom JavaScript. |
 | Speech-to-text | `pywhispercpp` 1.5.1 (whisper.cpp), model `base.en`, CPU | Runs locally and free (project rule: no paid cloud). Only engine that installs on this Python. |
 | After transcription | Text goes into the input box for review; user presses Enter | A misheard word would otherwise run a real query. |
-| Auto-send option | `INSIGHTPILOT_VOICE_AUTOSEND=1` sends immediately | Off by default. |
+| Auto-send option | Admin settings → Voice → "Send spoken questions immediately" | Off by default. The Admin page sets `INSIGHTPILOT_VOICE_AUTOSEND` for `voice.py`; setting that variable by hand has no effect. Verified 2026-11-16. |
 | Language | English only | The planner model and the data vocabulary are English. |
 | If the package is missing | Microphone button is hidden; app works as before | The app must never fail to start because of voice. |
 
@@ -77,11 +77,16 @@ with auto-send; silence showing a warning and sending nothing.
 
 * Run tests with `.venv\Scripts\python.exe -m pytest tests -q`. Do **not**
   use `pytest.exe` directly (imports fail). Baseline before this work:
-  **527 passed**.
+  **591 passed**.
 * Do not edit anything under `evaluation/`, and never commit
   `evaluation/results/`.
-* Do not edit `src/structured_agent.py`, `src/powerbi_agent.py` or the
-  `powerbi_embed_component/` folder.
+* Do not edit `src/structured_agent.py`, `src/powerbi_agent.py`,
+  `src/settings.py`, `src/llm.py`, `src/admin_page.py`,
+  `src/agent_factory.py` or the `powerbi_embed_component/` folder.
+* `src/main.py` already contains an Admin page (gear button). The edit
+  script was re-checked against that version on 2026-11-16 and applies
+  cleanly; the Admin page's Voice tab starts working by itself once
+  `src/voice.py` exists.
 * The app runs permanently in the background (scheduled task `InsightPilot`)
   on port 8501. Python modules are loaded once, so **the app must be
   restarted** to pick up the new package (step 8).
@@ -110,7 +115,7 @@ git status --short
 ```
 
 Expected: only `?? INSIGHTPILOT_CLAUDE_HANDOFF.md` in git status, and
-`527 passed`. If tests fail before you change anything, stop and report.
+`591 passed`. If tests fail before you change anything, stop and report.
 
 ### Step 2. Install the speech package
 
@@ -170,8 +175,8 @@ microphone-enabled version plus the transcription logic. Do not hand-edit
 
    Speech is turned into text on this computer (whisper.cpp, English). The
    first use downloads a 141 MB model into `models\`. To send spoken
-   questions without the review step, set the environment variable
-   `INSIGHTPILOT_VOICE_AUTOSEND=1` and restart InsightPilot.
+   questions without the review step, switch it on under Admin settings
+   (gear button) → Voice.
    ```
 
    Also in `README.md`, in the "Requirements:" paragraph under "One-time
@@ -193,7 +198,7 @@ must match. Afterwards `models\ggml-base.en.bin` exists.
 .venv\Scripts\python.exe -m pytest tests -q
 ```
 
-Expected: **547 passed** (527 + 20 new).
+Expected: **611 passed** (591 + 20 new).
 
 ### Step 8. Restart the app
 
@@ -241,7 +246,7 @@ this plan in the repository; they are already committed.
 
 ## 5. Definition of done
 
-* [ ] `547 passed`.
+* [ ] `611 passed`.
 * [ ] Step 6 printed the expected sentence.
 * [ ] The app restarted and `logs\app.err.log` has no traceback.
 * [ ] Changes committed and pushed; `git status --short` shows only the
@@ -263,7 +268,7 @@ this plan in the repository; they are already committed.
 | Traceback mentioning `agent_chat_input` cannot be modified | The session-state line ran after the widget was created | The edit was applied by hand in the wrong order. `git checkout src/main.py`, redo step 4 with the script. |
 | No microphone button in the app after restart | `voice.is_available()` is false in the running app | The package was installed into a different Python. Step 2 must use `.venv\Scripts\python.exe`. Then restart again (step 8). |
 | User: browser never asks for the microphone, or recording is silent | Browser or Windows microphone permission | Windows Settings → Privacy → Microphone must allow desktop apps; in the browser, the padlock/site-settings for `localhost:8501` must allow the microphone. Not a code problem. |
-| User: words are often misheard | Model too small for their voice or microphone | Set environment variable `INSIGHTPILOT_VOICE_MODEL=small.en` (488 MB download, about 2.6 seconds per question) and restart. Do not change code. |
+| User: words are often misheard | Model too small for their voice or microphone | In Admin settings → Voice, set the speech model to `small.en` (488 MB download, about 2.6 seconds per question), save, and restart InsightPilot. Do not change code. |
 
 ### If the edit script fails
 
@@ -308,7 +313,10 @@ microphone button (browser, built into st.chat_input)
    -> from here the question follows the existing path unchanged
 ```
 
-Settings (environment variables, read at app start):
+Settings. Since the Admin page was added (2026-11-16), `src/main.py` sets
+these two environment variables from Admin settings → Voice on every run, so
+the Admin page is where the user changes them; `voice.py` still just reads
+the environment and needs no change:
 
 | Variable | Default | Meaning |
 |---|---|---|
