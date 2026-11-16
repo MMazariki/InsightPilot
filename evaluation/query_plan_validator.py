@@ -78,7 +78,10 @@ def validate_query_plan(plan):
             check_expression(expression["numerator"])
             check_expression(expression["denominator"])
 
+    # DAX object names are case-insensitive, so name collisions are checked
+    # on case-folded names.
     aliases = set()
+    folded_aliases = set()
 
     for metric in plan["metrics"]:
         alias = metric["alias"]
@@ -86,10 +89,11 @@ def validate_query_plan(plan):
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _%/-]{0,79}", alias):
             raise ValueError(f"Unsafe or invalid metric alias: {alias}")
 
-        if alias in aliases:
+        if alias.casefold() in folded_aliases:
             raise ValueError(f"Duplicate metric alias: {alias}")
 
         aliases.add(alias)
+        folded_aliases.add(alias.casefold())
         check_expression(metric["expression"])
 
     grouping_fields = set()
@@ -104,6 +108,13 @@ def validate_query_plan(plan):
 
         if reference in grouping_fields:
             raise ValueError(f"Duplicate grouping field: {reference}")
+
+        # SUMMARIZECOLUMNS rejects an added column whose name matches a
+        # grouping column ("cannot add column [X] since it already exists").
+        if column.casefold() in folded_aliases:
+            raise ValueError(
+                f"Metric alias collides with grouping column: {reference}"
+            )
 
         grouping_fields.add(reference)
 

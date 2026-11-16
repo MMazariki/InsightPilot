@@ -166,3 +166,18 @@ def test_unknown_measure_rejected():
     plan["metrics"][0]["expression"]["name"] = "Fake Measure"
     with pytest.raises(ValueError, match="Unknown measure"):
         compile_query_plan(plan)
+
+
+def test_alias_collision_rejected_before_compilation():
+    plan = make_plan()
+    plan["group_by"] = [{"table": "DimProduct", "column": "Brand"}]
+    plan["metrics"].append({
+        "alias": "Brand",
+        "expression": {
+            "kind": "distinct_count",
+            "table": "DimProduct",
+            "column": "Brand"
+        }
+    })
+    with pytest.raises(ValueError, match="collides with grouping column"):
+        compile_query_plan(plan)

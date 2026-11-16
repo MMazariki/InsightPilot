@@ -142,3 +142,38 @@ def test_unsafe_metric_alias():
 
     with pytest.raises(ValueError, match="Unsafe or invalid"):
         validate_query_plan(plan)
+
+
+def test_duplicate_metric_alias_is_case_insensitive():
+    plan = valid_plan()
+    duplicate = copy.deepcopy(plan["metrics"][0])
+    duplicate["alias"] = "net sales"
+    plan["metrics"].append(duplicate)
+
+    with pytest.raises(ValueError, match="Duplicate metric alias"):
+        validate_query_plan(plan)
+
+
+@pytest.mark.parametrize("alias", ["Region", "REGION"])
+def test_metric_alias_colliding_with_grouping_column(alias):
+    # Shape of the Qwen 7B HOLD-005 plan, which Power BI rejected with
+    # "SUMMARIZECOLUMNS cannot add column [Brand] since it already exists".
+    plan = valid_plan()
+    plan["metrics"].append({
+        "alias": alias,
+        "expression": {
+            "kind": "distinct_count",
+            "table": "DimStore",
+            "column": "Region"
+        }
+    })
+
+    with pytest.raises(ValueError, match="collides with grouping column"):
+        validate_query_plan(plan)
+
+
+def test_metric_alias_matching_measure_name_is_allowed():
+    # "Net Sales" alias over [Net Sales] is the reference convention.
+    plan = valid_plan()
+    assert plan["metrics"][0]["alias"] == "Net Sales"
+    assert validate_query_plan(plan) == plan
