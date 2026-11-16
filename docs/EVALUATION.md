@@ -1,0 +1,174 @@
+# InsightPilot — Structured Planning Evaluation
+
+Last updated: 2026-11-16. All numbers below were measured by executing
+compiled DAX read-only against the Power BI semantic model and comparing with
+captured reference results. Models ran locally via Ollama
+(`qwen2.5-coder:3b`, `qwen2.5-coder:7b`, Q4_K_M, temperature 0,
+`num_ctx` 8192). No Azure AI Foundry or paid API was used.
+
+Result files live in `evaluation/results/` and are gitignored (they contain
+business data). This document contains scores and failure categories only.
+
+## 1. Pipeline
+
+```
+question
+  -> request guard (write/destructive requests -> clarification, no model call)
+  -> Ollama planner (JSON query plan OR {"clarification": ...})
+  -> alias normalisation (display labels only, recorded)            [v6]
+  -> semantic checks (actionable messages)                           [v4+]
+       rule 0  fix-it hints for misplaced references                 [v6]
+       rule 1  text filter values must exist in the value catalog
+       rule 2  no dimension distinct counts in another table's context
+       rule 3  no grouping by a column filtered to a single value    [v5+]
+  -> schema + model-reference validation (query_plan_validator)
+  -> on rejection: ONE repair turn showing the message                [v4+]
+  -> deterministic DAX compiler (no model-written DAX is executed)
+  -> Power BI ExecuteQueries (read-only)
+```
+
+Requirement coverage (`evaluation/requirement_coverage.py`) compares a plan
+with an explicit requirement spec (metrics by semantics, groupings, filters,
+thresholds, ordering, limits, unsupported intent). In evaluation it is used
+for scoring; it is not yet wired into the live app.
+
+| Pipeline | Contents |
+|---|---|
+| v1 | Prompt v1, plan only |
+| v2 | + clarification channel, request guard |
+| v3 | + model conventions in prompt (percent scale, monthly = YearMonth, fact-key distinct counts, no unrequested groupings) |
+| v4 | + value catalog in prompt, semantic rules 1–2, one repair turn |
+| v5 | + semantic rule 3 (prompt text identical to v4) |
+| v6 | + rule 0 fix-it hints, repair wording that discourages declining fixable mistakes, alias normalisation (prompt text identical to v4) |
+
+## 2. Method
+
+* **Fresh, pre-registered sets.** Each fresh set (questions, requirement
+  specs, hand-written reference DAX) was committed *before* any reference
+  capture or model generation on it, and after the pipeline change it tests
+  was committed. Commit order is the provenance record (see §5).
+* **Same-case A/B.** Each change is compared with its predecessor on the
+  same unseen set. Numbers are comparable within a set, not across sets.
+* **Execution score.** Valid plan → compiled → executed → result equivalent
+  to the reference (row-order-insensitive; row order is also checked when the
+  requirement specifies ordering).
+* **Strict score.** Execution pass **and** full requirement coverage. This
+  catches plans that return the right numbers by coincidence (e.g. a
+  dimension-key distinct count that happens to equal the fact-key count, or
+  `>=` vs `>` on an empty result).
+* **Unsupported cases.** *Not answered* = no valid plan; *declined* = a
+  deliberate clarification (planner or guard). *Over-refusal* = a
+  clarification on an answerable question.
+* **Comparators.** HOLD and fresh_v1/v2 use a comparator tolerating one
+  renamed metric column; fresh_v3+ tolerate up to four (values strict). The
+  comparator is fixed per set.
+* **Repair turns** only fire on rejected plans; valid plans are never sent
+  back. No infrastructure retries were needed in any fresh run.
+
+## 3. Results
+
+### 3.1 Original 12-case holdout (HOLD-001..012)
+
+| Architecture | 3B | 7B |
+|---|---:|---:|
+| Direct DAX generation, prompt V2 | 4/12 | 7/12 |
+| Structured plan → compiler (pipeline v1) | **9/12** | **9/12** |
+
+Execution score. The same 12 cases guided early development, so this is not
+an unbiased estimate.
+
+### 3.2 Fresh sets (answerable = execution / strict)
+
+| Set | Arm | 3B answerable | 7B answerable | 3B unsupported declined | 7B unsupported declined | Over-refusals 3B / 7B |
+|---|---|---:|---:|---:|---:|---:|
+| fresh_v1 (13 + 4) | v1 | 7 / 7 | 7 / 6 | 0 (2 not answered) | 0 (1 not answered) | – |
+| fresh_v2 (12 + 10) | v1 | 8 / 8 | 10 / 8 | 0 | 0 | 0 / 0 |
+| | **v2** | 8 / 8 | 10 / 8 | **4** | **7** | 0 / 0 |
+| fresh_v3 (16 + 6) | v2 | 9 / 7 | 7 / 5 | 3 | 4 | 0 / 0 |
+| | **v3** | **12 / 11** | **13 / 10** | 3 | 4 | 0 / 0 |
+| fresh_v4 (16 + 4) | v3 | 12 / 11 | 10 / 5 | 1 | 3 | 0 / 0 |
+| | **v4** | 13 / 12 | 9 / **7** | 3 | 4 | 0 / 1 |
+| fresh_v5 (16 + 4) | v4 | 11 / 11 | 9 / 8 | 3 | 4 | 4 / 0 |
+| | **v5** | 12 / 12 | **14 / 13** | 3 | 4 | 3 / 0 |
+| fresh_v6 (14 + 6) | v5 | 10 / 10 | 11 / 10 | 6 | 5 | 1 / 1 |
+| | **v6** | 10 / 10 | 12 / **11** | 6 | 5 | 3 / 0 |
+
+Set sizes are (answerable incl. one empty-result case + unsupported).
+fresh_v2 3B: one execution failure is a single-alias comparator false
+negative (both metrics renamed; values verified identical).
+
+### 3.3 What each change did
+
+* **Clarification channel + guard (v2).** Declines on unsupported requests
+  rose from 0 to 4/10 (3B) and 7/10 (7B) with no over-refusals. Without it,
+  "Delete all sales transactions from 2025" was silently planned as a read
+  query with `Year <> 2025`.
+* **Model conventions (v3).** Fixed percentage scale ("45%" planned as 45)
+  and monthly grouping (MonthName instead of YearMonth) on most probes; gains
+  on untargeted questions were small (+0 3B, +1 7B).
+* **Value catalog + rules 1–2 + repair (v4).** All filter values matched the
+  catalog (v3 used e.g. "Click and Collect" for "Click & Collect"). 7B
+  dimension-key distinct counts went 0/3 → 3/3 strict, all via repair.
+  Exposed the next dominant failure: grouping by the filtered column.
+* **Rule 3 (v5).** 7B single-value-filter probes 2/8 → 7/8 (5 repaired);
+  `ne` filters on grouped columns were never wrongly rejected.
+* **Hints + repair wording + alias normalisation (v6).** 7B repaired every
+  hinted mistake on answerable questions and over-refusals fell 1 → 0. 3B did
+  not act on hints; its failures moved from wrong/invalid plans to declines
+  (over-refusals 1 → 3, same correct count). Hints listing available measures
+  did not induce substitute answers for undefined metrics.
+
+## 4. Known limitations
+
+* **Small samples, single runs.** 12–16 answerable cases per set, temperature
+  0, one run per arm; one case ≈ 6–8 percentage points.
+* **Author-written sets.** Questions, specs and references were written by
+  the same engineer as the pipeline; each set probes the change being
+  measured, so targeted gains are expected. Untargeted questions show smaller
+  effects.
+* **3B ceiling.** 3B frequently uses columns as measures and does not follow
+  fix-it hints; its correct declines on unsupported requests also mostly come
+  via the repair turn, so removing the decline option would cost declines.
+* **Rule gaps (by design).** Rule 2 allows same-table dimension distinct
+  counts (e.g. customers per segment from `DimCustomer`), which can include
+  entities without sales (FRESH4-010 fails strict on both models).
+* **Request guard** is a routing heuristic with a fixed vocabulary, not a
+  security boundary; execution is read-only regardless.
+* **Value catalog** is a snapshot; it must be re-captured when dimension
+  values change (`python -m evaluation.capture_value_catalog`, refuses to
+  overwrite).
+* **Not yet covered:** row-level security, permission boundaries, data
+  freshness, ties beyond deterministic tie-breakers, multi-turn context,
+  `IN`-style multi-value filters (not expressible in the plan schema).
+* **Not integrated.** The live Streamlit app still uses the Foundry agent
+  path (`src/powerbi_agent.py`); the structured pipeline lives in
+  `evaluation/`.
+
+## 5. Provenance
+
+| Commit | Content |
+|---|---|
+| `c8435d7` | Structured plan pipeline, HOLD evaluation, requirement coverage |
+| `6d55886` | fresh_v1 set (pre-generation) |
+| `f0e06a4` → `13db552` | v2 pipeline → fresh_v2 set |
+| `70dd29b` → `7de70ff` | v3 + multi-alias comparator → fresh_v3 set |
+| `7ce6bf1` → `139d16a` | v4 pipeline → fresh_v4 set |
+| `fd22675` → `7f80e22` | v5 (rule 3) → fresh_v5 set |
+| `65843c1` → `74e27ff` | v6 → fresh_v6 set |
+
+## 6. Reproducing
+
+From the project root in the activated `.venv`:
+
+```
+python -m pytest tests/ -q
+python -m evaluation.run_query_plan_evaluation                 # HOLD set
+python -m evaluation.run_fresh_evaluation references --set fresh_v6
+python -m evaluation.run_fresh_evaluation generate   --set fresh_v6 --prompt v6
+python -m evaluation.run_fresh_evaluation evaluate   --set fresh_v6 --prompt v6
+```
+
+Every stage refuses to overwrite an existing result file; delete or move a
+result deliberately to re-run it. `references` and `evaluate` need the
+Power BI delegated sign-in (`ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`);
+`generate` needs a local Ollama with both Qwen models.
