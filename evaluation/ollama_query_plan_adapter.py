@@ -71,6 +71,8 @@ PROMPT_FILES = {
     "v5": "query_plan_prompt_v4.txt",
     # v6 changes repair wording, hints and alias normalisation, not the prompt.
     "v6": "query_plan_prompt_v4.txt",
+    # v7 adds expression-kind hints (rule 0b); prompt text unchanged.
+    "v7": "query_plan_prompt_v4.txt",
 }
 
 

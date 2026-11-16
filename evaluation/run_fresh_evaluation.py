@@ -67,11 +67,12 @@ SETS = {
     "fresh_v4": "fresh_cases_v4.json",
     "fresh_v5": "fresh_cases_v5.json",
     "fresh_v6": "fresh_cases_v6.json",
+    "fresh_v7": "fresh_cases_v7.json",
 }
-PROMPTS = ("v1", "v2", "v3", "v4", "v5", "v6")
+PROMPTS = ("v1", "v2", "v3", "v4", "v5", "v6", "v7")
 # Prompts whose pipeline adds semantic checks and one validator-feedback
 # repair attempt for rejected plans.
-REPAIR_PROMPTS = {"v4", "v5", "v6"}
+REPAIR_PROMPTS = {"v4", "v5", "v6", "v7"}
 REPAIR_INSTRUCTION = (
     "Your previous response was rejected: {error}\n"
     "Return a corrected JSON object: either a query plan that fixes this "
@@ -90,20 +91,22 @@ REPAIR_INSTRUCTION_V6 = (
 
 def semantic_level(prompt):
     """Semantic checks per pipeline: none (v1-v3), v4 rules, v4 + rule 3,
-    v4 + rule 3 + rule 0 hints and alias normalisation (v6)."""
+    v4 + rule 3 + rule 0 hints and alias normalisation (v6), v6 + rule 0b
+    expression-kind hints (v7)."""
 
-    if prompt in ("v5", "v6"):
+    if prompt in ("v5", "v6", "v7"):
         return prompt
     return prompt in REPAIR_PROMPTS
 
 
 def repair_instruction(prompt):
-    return REPAIR_INSTRUCTION_V6 if prompt == "v6" else REPAIR_INSTRUCTION
+    return (REPAIR_INSTRUCTION_V6 if prompt in ("v6", "v7")
+            else REPAIR_INSTRUCTION)
 
 # Comparator per case set is fixed so every arm on a set is scored by the same
 # rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
 # sets tolerate several renamed metrics (values remain strict).
-MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5", "fresh_v6"}
+MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5", "fresh_v6", "fresh_v7"}
 
 
 def comparators_for(set_name):

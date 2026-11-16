@@ -63,6 +63,65 @@ def _expressions(expression):
         yield from _expressions(expression.get("denominator"))
 
 
+SUPPORTED_KINDS = ("measure", "distinct_count", "divide")
+COUNT_KINDS = {"count", "distinct", "countdistinct", "count_distinct",
+               "distinctcount", "unique_count"}
+
+
+def check_expression_kinds(plan, model=None):
+    """Rule 0b (pipeline v7): fix-it messages for unsupported expression
+    kinds (e.g. ``sum``/``metric``), including nested inside ``divide``.
+
+    If the expression names an existing measure, point to it (measures
+    already aggregate); count-like kinds on a column point to
+    ``distinct_count``; otherwise list the supported kinds.
+    """
+
+    model = load_model() if model is None else model
+    measures = {
+        measure["Name"].casefold(): measure["Name"]
+        for table in model["Tables"]
+        for measure in table.get("Measures", [])
+    }
+
+    def visit(expression):
+        if not isinstance(expression, dict):
+            return
+        kind = expression.get("kind")
+        if kind == "divide":
+            visit(expression.get("numerator"))
+            visit(expression.get("denominator"))
+            return
+        if kind in SUPPORTED_KINDS:
+            return
+        for key in ("name", "measure", "column"):
+            value = expression.get(key)
+            if isinstance(value, str) and value.casefold() in measures:
+                name = measures[value.casefold()]
+                raise ValueError(
+                    f"Expression kind {kind!r} is not supported. '{name}' is "
+                    f"an existing measure and already aggregates; use "
+                    f'{{"kind": "measure", "name": "{name}"}}.'
+                )
+        if (str(kind).casefold() in COUNT_KINDS
+                and expression.get("table") and expression.get("column")):
+            raise ValueError(
+                f"Expression kind {kind!r} is not supported. To count distinct "
+                f'values use {{"kind": "distinct_count", "table": '
+                f'"{expression["table"]}", "column": "{expression["column"]}"}}.'
+            )
+        raise ValueError(
+            f"Expression kind {kind!r} is not supported. Supported kinds: "
+            f"measure (an existing measure), distinct_count (table + column), "
+            f"divide (numerator + denominator)."
+        )
+
+    for metric in plan.get("metrics", []) or []:
+        if isinstance(metric, dict):
+            visit(metric.get("expression"))
+    return plan
+
+
 def check_reference_hints(plan, model=None):
     """Rule 0 (pipeline v6): fix-it messages for misplaced references.
 
@@ -152,7 +211,8 @@ def check_reference_hints(plan, model=None):
 
 def check_semantic_rules(plan, catalog=None, model=None,
                          reject_single_value_grouping=False,
-                         reference_hints=False):
+                         reference_hints=False,
+                         expression_kind_hints=False):
     """Raise ``ValueError`` with an actionable message, else return plan.
 
     ``reject_single_value_grouping`` enables rule 3 (pipeline v5): a column
@@ -160,11 +220,14 @@ def check_semantic_rules(plan, catalog=None, model=None,
     because the grouping only adds a constant column. ``ne`` filters are
     unaffected ("by channel, excluding Delivery" is legitimate).
     ``reference_hints`` enables rule 0 (pipeline v6), run first.
+    ``expression_kind_hints`` enables rule 0b (pipeline v7), run before 0.
     """
 
     catalog = load_catalog() if catalog is None else catalog
     model = load_model() if model is None else model
 
+    if expression_kind_hints:
+        check_expression_kinds(plan, model)
     if reference_hints:
         check_reference_hints(plan, model)
 

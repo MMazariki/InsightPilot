@@ -66,7 +66,7 @@ def parse_planner_response(raw, semantic_checks=False):
         }
 
     normalizations = []
-    if semantic_checks == "v6":
+    if semantic_checks in ("v6", "v7"):
         payload, normalizations = sanitize_aliases(payload)
 
     if semantic_checks:
@@ -75,8 +75,9 @@ def parse_planner_response(raw, semantic_checks=False):
         # True -> pipeline v4 rules; "v5" adds rule 3; "v6" adds rule 0 hints.
         check_semantic_rules(
             payload,
-            reject_single_value_grouping=semantic_checks in ("v5", "v6"),
-            reference_hints=semantic_checks == "v6",
+            reject_single_value_grouping=semantic_checks in ("v5", "v6", "v7"),
+            reference_hints=semantic_checks in ("v6", "v7"),
+            expression_kind_hints=semantic_checks == "v7",
         )
     validate_query_plan(payload)
     result = {"kind": "plan", "plan": payload}
