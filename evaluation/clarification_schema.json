@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InsightPilot Planner Clarification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clarification"],
+  "properties": {
+    "clarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "message"],
+      "properties": {
+        "reason": {
+          "enum": [
+            "undefined_metric",
+            "missing_data",
+            "ambiguous",
+            "write_request",
+            "out_of_scope"
+          ]
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    }
+  }
+}

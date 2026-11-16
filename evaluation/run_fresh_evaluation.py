@@ -2,12 +2,17 @@
 
 Run from the project root, one stage at a time:
 
-    python -m evaluation.run_fresh_evaluation references   # Power BI (read-only)
-    python -m evaluation.run_fresh_evaluation generate     # local Ollama only
-    python -m evaluation.run_fresh_evaluation evaluate     # Power BI (read-only)
+    python -m evaluation.run_fresh_evaluation references [--set S]
+    python -m evaluation.run_fresh_evaluation generate   [--set S] [--prompt P]
+    python -m evaluation.run_fresh_evaluation evaluate   [--set S] [--prompt P]
 
-Cases, requirement specs and reference DAX live in evaluation/fresh_cases_v1.json
-and were committed before any generation. No stage calls Azure AI Foundry or a
+``references`` and ``evaluate`` call Power BI (read-only); ``generate`` calls
+local Ollama only. Sets: fresh_v1 (default), fresh_v2. Prompts: v1 (default;
+plan only, no request guard) and v2 (plan OR clarification, with the
+pre-planner write-request guard).
+
+Cases, requirement specs and reference DAX live in evaluation/fresh_cases_*
+files and were committed before any generation on that set. No stage calls Azure AI Foundry or a
 paid API, and no stage overwrites an existing result file.
 
 Scoring per model:
@@ -15,9 +20,10 @@ Scoring per model:
     from JSON, executed, results equivalent to reference (row order also
     checked when the requirement specifies ordering). Strict pass =
     execution pass AND requirement coverage.
-  * unsupported: pass = no valid plan produced. The v1 prompt has no
-    refusal/clarification channel, so a "pass" here means the plan failed
-    validation, not that the model deliberately declined.
+  * unsupported: ``passed`` = no valid plan produced (comparable across
+    prompts); ``declined`` = a deliberate clarification (planner or guard).
+    Under v1 there is no clarification channel, so declined is always 0.
+  * a clarification on an answerable case is an over-refusal (fails).
 """
 
 import hashlib
@@ -31,8 +37,10 @@ import requests
 
 from evaluation.alias_aware_comparator import compare_results_with_metric_alias
 from evaluation.ordered_comparator import compare_results_ordered
+from evaluation.planner_response import parse_planner_response
 from evaluation.query_plan_compiler import compile_query_plan
 from evaluation.query_plan_validator import validate_query_plan
+from evaluation.request_guard import screen_request
 from evaluation.requirement_coverage import check_requirement_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,14 +56,44 @@ NUM_CTX = 8192          # same as the v1 holdout generation, for comparability
 MAX_ATTEMPTS = 3        # infrastructure failures only
 RETRY_DELAY_SECONDS = 10
 ANSWERABLE = ("answerable", "empty_result")
+DECLINED_STATUSES = ("clarification", "blocked_by_guard")
+SETS = {"fresh_v1": "fresh_cases_v1.json", "fresh_v2": "fresh_cases_v2.json"}
+PROMPTS = ("v1", "v2")
+
+
+def resolve_paths(set_name="fresh_v1", prompt="v1"):
+    """Input/output paths for a (case set, prompt) arm.
+
+    The original fresh_v1 + v1 arm keeps its legacy file names (and honours
+    the module-level constants, so tests can redirect them).
+    """
+
+    if set_name not in SETS or prompt not in PROMPTS:
+        raise ValueError(f"Unknown set/prompt: {set_name}/{prompt}")
+
+    if set_name == "fresh_v1":
+        references = REFERENCES_FILE
+        cases = CASES_FILE
+    else:
+        references = RESULTS / f"{set_name}_reference_results.json"
+        cases = EVAL / SETS[set_name]
+
+    if (set_name, prompt) == ("fresh_v1", "v1"):
+        plans, report = PLANS_FILE, REPORT_FILE
+    else:
+        plans = RESULTS / f"{set_name}_prompt_{prompt}_query_plans.json"
+        report = RESULTS / f"{set_name}_prompt_{prompt}_evaluation.json"
+
+    return {"cases": cases, "references": references,
+            "plans": plans, "report": report}
 
 
 def load_json(path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def load_cases():
-    cases = load_json(CASES_FILE)["cases"]
+def load_cases(path=None):
+    cases = load_json(path or CASES_FILE)["cases"]
     ids = [case["id"] for case in cases]
     if len(ids) != len(set(ids)):
         raise ValueError("Duplicate fresh case IDs")
@@ -80,11 +118,12 @@ def write_json(path, payload):
 # Stage 1: reference capture
 # ----------------------------------------------------------------------
 
-def capture_references():
+def capture_references(paths):
     from src.powerbi_query_service import PowerBIQueryService
 
-    refuse_overwrite(REFERENCES_FILE)
-    cases = [case for case in load_cases() if case["category"] in ANSWERABLE]
+    refuse_overwrite(paths["references"])
+    cases = [case for case in load_cases(paths["cases"])
+             if case["category"] in ANSWERABLE]
     service = PowerBIQueryService()
     output = {
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -109,7 +148,7 @@ def capture_references():
     finally:
         service.close()
 
-    write_json(REFERENCES_FILE, output)
+    write_json(paths["references"], output)
 
 
 # ----------------------------------------------------------------------
@@ -144,29 +183,44 @@ def generate_with_retry(generate, model, question, instructions,
                        + " | ".join(errors))
 
 
-def plan_record(case, model, raw):
-    """Parse and validate one raw model response (never retried)."""
+def plan_record(case, model, raw, prompt="v1"):
+    """Parse and validate one raw model response (never retried).
+
+    Under v1 only query plans are accepted (original behaviour). Under v2 a
+    schema-valid clarification is recorded as ``clarification``.
+    """
 
     record = {"id": case["id"], "model": model, "raw_response": raw}
     try:
-        plan = json.loads(raw)
-        record["plan"] = plan
-        validate_query_plan(plan)
-        record["status"] = "valid_plan"
+        payload = json.loads(raw)
+        record["plan"] = payload
+        if prompt == "v1":
+            validate_query_plan(payload)
+            record["status"] = "valid_plan"
+        else:
+            parsed = parse_planner_response(payload)
+            if parsed["kind"] == "plan":
+                record["status"] = "valid_plan"
+            else:
+                del record["plan"]
+                record["clarification"] = {"reason": parsed["reason"],
+                                           "message": parsed["message"]}
+                record["status"] = "clarification"
     except (ValueError, TypeError, KeyError) as exc:
         record["status"] = "invalid_plan"
         record["error"] = str(exc)
     return record
 
 
-def generate_plans():
+def generate_plans(paths, prompt="v1"):
     from evaluation.ollama_query_plan_adapter import (
         build_instructions, generate_plan,
     )
 
-    refuse_overwrite(PLANS_FILE)
-    cases = load_cases()
-    instructions = build_instructions()
+    refuse_overwrite(paths["plans"])
+    cases = load_cases(paths["cases"])
+    instructions = build_instructions(prompt)
+    use_guard = prompt != "v1"
 
     try:
         tags = requests.get("http://localhost:11434/api/tags", timeout=10).json()
@@ -178,10 +232,17 @@ def generate_plans():
     for model in MODELS:
         for case in cases:
             print(f"{model} | {case['id']}", flush=True)
+            blocked = screen_request(case["question"]) if use_guard else None
+            if blocked is not None:
+                records.append({"id": case["id"], "model": model,
+                                "status": "blocked_by_guard",
+                                "clarification": blocked["clarification"]})
+                print("  blocked_by_guard", flush=True)
+                continue
             try:
                 raw, attempts, errors = generate_with_retry(
                     generate_plan, model, case["question"], instructions)
-                record = plan_record(case, model, raw)
+                record = plan_record(case, model, raw, prompt)
                 record["attempts"] = attempts
                 record["infrastructure_errors"] = errors
             except Exception as exc:
@@ -190,9 +251,11 @@ def generate_plans():
             print(f"  {record['status']} {record.get('error', '')}", flush=True)
             records.append(record)
 
-    write_json(PLANS_FILE, {
+    write_json(paths["plans"], {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "cases_file": CASES_FILE.name,
+        "cases_file": paths["cases"].name,
+        "prompt_version": prompt,
+        "request_guard": use_guard,
         "prompt_sha256": hashlib.sha256(instructions.encode("utf-8")).hexdigest(),
         "num_ctx": NUM_CTX,
         "temperature": 0,
@@ -219,14 +282,30 @@ def evaluate_case(case, record, reference, execute):
     result["coverage_findings"] = coverage["findings"]
     result["covered"] = coverage["covered"]
 
+    declined = status in DECLINED_STATUSES
+    result["declined"] = declined
+    if declined:
+        result["clarification_reason"] = (
+            (record.get("clarification") or {}).get("reason"))
+
     if case["category"] == "unsupported":
         if status == "infrastructure_error":
             result.update(passed=False, outcome="infrastructure_error")
+        elif declined:
+            result.update(passed=True, outcome="declined")
         else:
             answered = status == "valid_plan"
             result.update(passed=not answered,
                           outcome="answered" if answered else "not_answered")
         result["strict_passed"] = result["passed"]
+        expected = case.get("expected_reason")
+        if declined and expected:
+            result["reason_matches"] = result["clarification_reason"] == expected
+        return result
+
+    if declined:
+        result.update(passed=False, strict_passed=False,
+                      outcome="over_refusal")
         return result
 
     if reference is None or reference.get("status") != "success":
@@ -267,7 +346,7 @@ def summarise(results):
     unsupported = [item for item in results if item["category"] == "unsupported"]
 
     def ratio(items, key):
-        passed = sum(item[key] for item in items)
+        passed = sum(bool(item.get(key)) for item in items)
         return {"passed": passed, "total": len(items),
                 "accuracy": passed / len(items) if items else None}
 
@@ -275,18 +354,21 @@ def summarise(results):
         "answerable_execution": ratio(answerable, "passed"),
         "answerable_strict": ratio(answerable, "strict_passed"),
         "unsupported_not_answered": ratio(unsupported, "passed"),
+        "unsupported_declined": ratio(unsupported, "declined"),
+        "answerable_over_refusals": sum(
+            item.get("outcome") == "over_refusal" for item in answerable),
         "valid_plans": sum(item["plan_status"] == "valid_plan" for item in results),
     }
 
 
-def evaluate():
+def evaluate(paths):
     from src.powerbi_query_service import PowerBIQueryService
 
-    refuse_overwrite(REPORT_FILE)
-    cases = load_cases()
-    references_payload = load_json(REFERENCES_FILE)
+    refuse_overwrite(paths["report"])
+    cases = load_cases(paths["cases"])
+    references_payload = load_json(paths["references"])
     references = {item["id"]: item for item in references_payload["cases"]}
-    plans_payload = load_json(PLANS_FILE)
+    plans_payload = load_json(paths["plans"])
     records = {(item["model"], item["id"]): item
                for item in plans_payload["records"]}
 
@@ -322,34 +404,46 @@ def evaluate():
         summary = payload["summary"]
         print(f"\n{model}")
         for key in ("answerable_execution", "answerable_strict",
-                    "unsupported_not_answered"):
+                    "unsupported_not_answered", "unsupported_declined"):
             item = summary[key]
             print(f"  {key}: {item['passed']}/{item['total']}")
+        print(f"  answerable_over_refusals: "
+              f"{summary['answerable_over_refusals']}")
 
-    write_json(REPORT_FILE, {
+    write_json(paths["report"], {
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset_id": references_payload["dataset_id"],
-        "source_cases": CASES_FILE.name,
-        "source_plans": PLANS_FILE.name,
-        "source_references": REFERENCES_FILE.name,
+        "source_cases": paths["cases"].name,
+        "source_plans": paths["plans"].name,
+        "source_references": paths["references"].name,
+        "prompt_version": plans_payload.get("prompt_version", "v1"),
+        "request_guard": plans_payload.get("request_guard", False),
         "prompt_sha256": plans_payload.get("prompt_sha256"),
         "models": per_model,
     })
 
 
-STAGES = {
-    "references": capture_references,
-    "generate": generate_plans,
-    "evaluate": evaluate,
-}
+STAGES = ("references", "generate", "evaluate")
 
 
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    if len(argv) != 1 or argv[0] not in STAGES:
-        raise SystemExit(f"Usage: python -m evaluation.run_fresh_evaluation "
-                         f"{{{'|'.join(STAGES)}}}")
-    STAGES[argv[0]]()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m evaluation.run_fresh_evaluation")
+    parser.add_argument("stage", choices=STAGES)
+    parser.add_argument("--set", dest="set_name", choices=sorted(SETS),
+                        default="fresh_v1")
+    parser.add_argument("--prompt", choices=PROMPTS, default="v1")
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+
+    paths = resolve_paths(args.set_name, args.prompt)
+    if args.stage == "references":
+        capture_references(paths)
+    elif args.stage == "generate":
+        generate_plans(paths, args.prompt)
+    else:
+        evaluate(paths)
 
 
 if __name__ == "__main__":

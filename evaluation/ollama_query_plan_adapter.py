@@ -62,8 +62,17 @@ def generate_plan(model, question, instructions):
     return response.json()["message"]["content"].strip()
 
 
-def build_instructions():
-    """Build the v1 planner system prompt (prompt + model + plan contract)."""
+PROMPT_FILES = {
+    "v1": "query_plan_prompt_v1.txt",
+    "v2": "query_plan_prompt_v2.txt",
+}
+
+
+def build_instructions(prompt_version="v1"):
+    """Build the planner system prompt (prompt + model + output contracts).
+
+    v1: query plan only (unchanged). v2: adds the clarification contract.
+    """
 
     contract = json.loads(
         (EVAL / "query_plan_schema.json").read_text(
@@ -71,7 +80,7 @@ def build_instructions():
         )
     )
 
-    prompt = (EVAL / "query_plan_prompt_v1.txt").read_text(
+    prompt = (EVAL / PROMPT_FILES[prompt_version]).read_text(
         encoding="utf-8-sig"
     )
 
@@ -82,7 +91,7 @@ def build_instructions():
         for r in model_schema["ActiveRelationships"]
     )
 
-    return (
+    instructions = (
         prompt
         + "\n\nSEMANTIC MODEL:\n"
         + load_schema()
@@ -91,6 +100,19 @@ def build_instructions():
         + "\n\nQUERY PLAN JSON SCHEMA:\n"
         + json.dumps(contract, separators=(",", ":"))
     )
+
+    if prompt_version != "v1":
+        clarification = json.loads(
+            (EVAL / "clarification_schema.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        instructions += (
+            "\n\nCLARIFICATION JSON SCHEMA:\n"
+            + json.dumps(clarification, separators=(",", ":"))
+        )
+
+    return instructions
 
 
 def main():
