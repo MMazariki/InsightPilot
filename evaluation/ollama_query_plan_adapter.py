@@ -79,6 +79,8 @@ PROMPT_FILES = {
     "v9": "query_plan_prompt_v4.txt",
     # v10 = v9 + grouped-column metric normalisation; prompt unchanged.
     "v10": "query_plan_prompt_v4.txt",
+    # v11 = v10 + no-metric gate trigger; prompt unchanged.
+    "v11": "query_plan_prompt_v4.txt",
 }
 
 

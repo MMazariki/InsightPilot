@@ -71,13 +71,17 @@ SETS = {
     "fresh_v8": "fresh_cases_v8.json",
     "fresh_v9": "fresh_cases_v9.json",
     "fresh_v10": "fresh_cases_v10.json",
+    "fresh_v11": "fresh_cases_v11.json",
 }
-PROMPTS = ("v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10")
+PROMPTS = ("v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+           "v11")
 # Prompts whose pipeline adds semantic checks and one validator-feedback
 # repair attempt for rejected plans.
-REPAIR_PROMPTS = {"v4", "v5", "v6", "v7", "v8", "v9", "v10"}
+REPAIR_PROMPTS = {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
 # Pipeline v9 = v7 + answerability gate (evaluation/answerability.py).
-GATE_PROMPTS = {"v9", "v10"}
+GATE_PROMPTS = {"v9", "v10", "v11"}
+# Pipeline v11: the gate also verifies questions that name no metric.
+METRIC_REFERENCE_PROMPTS = {"v11"}
 REPAIR_INSTRUCTION = (
     "Your previous response was rejected: {error}\n"
     "Return a corrected JSON object: either a query plan that fixes this "
@@ -99,20 +103,21 @@ def semantic_level(prompt):
     v4 + rule 3 + rule 0 hints and alias normalisation (v6), v6 + rule 0b
     expression-kind hints (v7)."""
 
-    if prompt in ("v5", "v6", "v7", "v8", "v9", "v10"):
+    if prompt in ("v5", "v6", "v7", "v8", "v9", "v10", "v11"):
         return prompt
     return prompt in REPAIR_PROMPTS
 
 
 def repair_instruction(prompt):
-    return (REPAIR_INSTRUCTION_V6 if prompt in ("v6", "v7", "v8", "v9", "v10")
+    return (REPAIR_INSTRUCTION_V6
+            if prompt in ("v6", "v7", "v8", "v9", "v10", "v11")
             else REPAIR_INSTRUCTION)
 
 # Comparator per case set is fixed so every arm on a set is scored by the same
 # rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
 # sets tolerate several renamed metrics (values remain strict).
 MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5", "fresh_v6", "fresh_v7",
-                    "fresh_v8", "fresh_v9", "fresh_v10"}
+                    "fresh_v8", "fresh_v9", "fresh_v10", "fresh_v11"}
 
 
 def comparators_for(set_name):
@@ -316,7 +321,8 @@ def attempt_repair(case, model, instructions, record, prompt, chat,
     return repaired
 
 
-def apply_answerability_gate(case, model, record, chat, sleep=time.sleep):
+def apply_answerability_gate(case, model, record, chat, sleep=time.sleep,
+                             require_metric_reference=False):
     """Pipeline v9: gate a *valid* plan; a failed gate becomes a
     clarification (the plan is kept in ``gated_plan`` for audit)."""
 
@@ -331,7 +337,8 @@ def apply_answerability_gate(case, model, record, chat, sleep=time.sleep):
             sleep=sleep)
         return raw
 
-    result = gate(case["question"], record["plan"], call, model)
+    result = gate(case["question"], record["plan"], call, model,
+                  require_metric_reference=require_metric_reference)
     record["answerability"] = result
     if not result["passed"]:
         record["gated_plan"] = record.pop("plan")
@@ -384,7 +391,8 @@ def generate_plans(paths, prompt="v1"):
                                             record, prompt, generate_messages)
                 if prompt in GATE_PROMPTS:
                     record = apply_answerability_gate(
-                        case, model, record, generate_messages)
+                        case, model, record, generate_messages,
+                        require_metric_reference=prompt in METRIC_REFERENCE_PROMPTS)
                     if "answerability" in record:
                         print(f"  gate: {record['answerability']['unknown_terms']}"
                               f" -> {'pass' if record['answerability']['passed'] else 'blocked'}",

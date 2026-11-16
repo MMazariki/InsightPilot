@@ -151,14 +151,17 @@ differs (e.g. "revenue" for Net Sales, "items" for Units Sold).
 """
 
 
-def verify(question, plan, unknown, chat, model_name, measures):
+def verify(question, plan, unknown, chat, model_name, measures, note=None):
+    content = (
+        f"Question: {question}\n"
+        f"Plan: {describe_plan(plan)}\n"
+        f"Available measures: {', '.join(measures)}\n"
+        f"Question words not found in the model: {', '.join(unknown)}")
+    if note:
+        content += f"\nNote: {note}"
     messages = [
         {"role": "system", "content": VERIFIER_INSTRUCTIONS},
-        {"role": "user", "content": (
-            f"Question: {question}\n"
-            f"Plan: {describe_plan(plan)}\n"
-            f"Available measures: {', '.join(measures)}\n"
-            f"Question words not found in the model: {', '.join(unknown)}")},
+        {"role": "user", "content": content},
     ]
     raw = chat(model_name, messages)
     try:
@@ -174,22 +177,69 @@ def verify(question, plan, unknown, chat, model_name, measures):
                 "raw": raw, "verifier_error": True}
 
 
-def gate(question, plan, chat, model_name, vocabulary=None, model=None):
-    """Return ``{"passed": bool, "unknown_terms": [...], "verdict": ...}``."""
+# Words that name a metric, or an entity being counted, in a question
+# (pipeline v11). Measure-name tokens are added from the model at runtime.
+METRIC_WORDS = set("""
+revenue revenues sales sale sold profit profits margin margins discount
+discounts unit units item items quantity quantities order orders customer
+customers shopper shoppers buyer buyers product products store stores
+transaction transactions target targets variance achievement brand brands
+city cities segment segments category categories subcategory subcategories
+channel channels method methods region regions
+""".split())
+GENERIC_MEASURE_TOKENS = {"total", "of", "on", "per"}
+COUNT_PHRASES = re.compile(r"\bhow many\b|\bnumber of\b|\bcount\b", re.I)
+
+
+def names_a_metric(question, model=None):
+    """True if the question names a measure-like quantity or counts entities."""
+
+    model = load_model() if model is None else model
+    words = set(METRIC_WORDS)
+    for table in model["Tables"]:
+        for measure in table.get("Measures", []):
+            words.update(t for t in _tokens(measure["Name"])
+                         if t not in GENERIC_MEASURE_TOKENS)
+    if COUNT_PHRASES.search(question):
+        return True
+    return any(_known(word, words)
+               for word in _WORD.findall(question.lower()) if len(word) >= 3)
+
+
+NO_METRIC_NOTE = ("The question does not name any metric or quantity; unless "
+                  "the request makes the wanted metric unambiguous, the plan "
+                  "is guessing and is not faithful.")
+
+
+def gate(question, plan, chat, model_name, vocabulary=None, model=None,
+         require_metric_reference=False):
+    """Return ``{"passed": bool, "unknown_terms": [...], "verdict": ...}``.
+
+    ``require_metric_reference`` (pipeline v11) also runs the verifier when
+    the question names no metric at all (e.g. "Show me the totals").
+    """
 
     model = load_model() if model is None else model
     unknown = unknown_terms(question, vocabulary)
-    if not unknown:
+    no_metric = require_metric_reference and not names_a_metric(question, model)
+    if not unknown and not no_metric:
         return {"passed": True, "unknown_terms": [], "verdict": None}
     measures = sorted(measure["Name"] for table in model["Tables"]
                       for measure in table.get("Measures", []))
-    verdict = verify(question, plan, unknown, chat, model_name, measures)
-    return {"passed": verdict["faithful"], "unknown_terms": unknown,
-            "verdict": verdict}
+    verdict = verify(question, plan, unknown, chat, model_name, measures,
+                     note=NO_METRIC_NOTE if no_metric else None)
+    result = {"passed": verdict["faithful"], "unknown_terms": unknown,
+              "verdict": verdict}
+    if require_metric_reference:
+        result["no_metric_reference"] = no_metric
+    return result
 
 
 def clarification_message(result):
     terms = ", ".join(result["unknown_terms"])
     reason = (result.get("verdict") or {}).get("reason", "")
+    if not terms and result.get("no_metric_reference"):
+        return (f"Which metric do you mean (for example net sales, gross "
+                f"profit or units sold)? {reason}".strip())
     return (f"I can't answer this faithfully from the semantic model "
             f"(unrecognised terms: {terms}). {reason}".strip())

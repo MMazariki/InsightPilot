@@ -69,6 +69,9 @@ def parse_planner_response(raw, semantic_checks=False):
         }
 
     normalizations = []
+    if semantic_checks == "v11":
+        # Pipeline v11 = v10 parsing; the stricter gate runs in the caller.
+        semantic_checks = "v10"
     if semantic_checks == "v10":
         # Pipeline v10 = v9 + dropping metrics that echo a grouping column.
         payload, normalizations = drop_grouped_column_metrics(payload)
