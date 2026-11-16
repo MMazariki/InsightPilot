@@ -256,7 +256,11 @@ class Transcriber:
 def transcribe_wav(data, transcriber):
     """WAV bytes -> question text. Raises ``VoiceError`` with a user message."""
 
-    samples = decode_wav(data)
+    try:
+        samples = decode_wav(data)
+    except VoiceError as exc:
+        print(f"[VOICE] clip rejected ({len(data)} bytes): {exc}", flush=True)
+        raise
     seconds = len(samples) / SAMPLE_RATE
     try:
         samples, peak = prepare_audio(samples)

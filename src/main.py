@@ -215,6 +215,8 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
 [data-testid="stExpander"] summary p { font-size: .85rem; color: #475467; }
 .st-key-admin_card h3 { font-size: 1.08rem; font-weight: 650; padding-top: .9rem; }
 .ip-foot { text-align: center; color: #98A2B3; font-size: .76rem; margin-top: 10px; }
+.ip-voice-hint { color: #667085; font-size: .78rem; margin: -6px 2px 0 2px; }
+.ip-voice-hint b { color: #344054; }
 </style>
 """
 )
@@ -476,6 +478,18 @@ with chat_column, st.container(border=True, key="chat_card"):
     # with .text and .audio, not as a plain string.
     typed_text, audio_bytes = voice.split_submission(submission)
     prompt = typed_text or None
+
+    if VOICE_ENABLED:
+        st.html(
+            '<div class="ip-voice-hint">To ask by voice: click the microphone, '
+            "speak, then click the <b>tick (&#10003;)</b> to finish. Your words "
+            "appear in the box; press Enter to send.</div>"
+        )
+        if submission is not None:
+            # Levels only, never content (see src/voice.py).
+            print(f"[VOICE] submission received: audio="
+                  f"{len(audio_bytes) if audio_bytes else 0} bytes, "
+                  f"typed={len(typed_text)} characters", flush=True)
 
     if audio_bytes:
         heard = ""
