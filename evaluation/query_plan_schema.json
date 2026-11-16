@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InsightPilot Query Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metrics", "group_by", "filters", "order_by", "limit"],
+  "properties": {
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["alias", "expression"],
+        "properties": {
+          "alias": {"type": "string", "minLength": 1},
+          "expression": {"$ref": "#/$defs/expression"}
+        }
+      }
+    },
+    "group_by": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/field"}
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "table", "column", "operator", "value"],
+            "properties": {
+              "type": {"const": "column"},
+              "table": {"type": "string"},
+              "column": {"type": "string"},
+              "operator": {"enum": ["eq", "ne", "gt", "gte", "lt", "lte"]},
+              "value": {"type": ["string", "number", "boolean"]}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "alias", "operator", "value"],
+            "properties": {
+              "type": {"const": "metric"},
+              "alias": {"type": "string"},
+              "operator": {"enum": ["eq", "ne", "gt", "gte", "lt", "lte"]},
+              "value": {"type": "number"}
+            }
+          }
+        ]
+      }
+    },
+    "order_by": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "direction"],
+        "properties": {
+          "field": {"type": "string"},
+          "direction": {"enum": ["asc", "desc"]}
+        }
+      }
+    },
+    "limit": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 1000
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table", "column"],
+      "properties": {
+        "table": {"type": "string"},
+        "column": {"type": "string"}
+      }
+    },
+    "expression": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {"const": "measure"},
+            "name": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "table", "column"],
+          "properties": {
+            "kind": {"const": "distinct_count"},
+            "table": {"type": "string"},
+            "column": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "numerator", "denominator"],
+          "properties": {
+            "kind": {"const": "divide"},
+            "numerator": {"$ref": "#/$defs/expression"},
+            "denominator": {"$ref": "#/$defs/expression"}
+          }
+        }
+      ]
+    }
+  }
+}

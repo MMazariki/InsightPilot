@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "description": "Hand-authored structured requirements for the 12 holdout questions, derived from holdout_reference_queries.json. Used by requirement_coverage.py; contains no business result data.",
+  "cases": [
+    {
+      "id": "HOLD-001",
+      "metrics": [
+        {"kind": "measure", "name": "Gross Sales"},
+        {"kind": "measure", "name": "Total Discounts"}
+      ],
+      "group_by": [],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-002",
+      "metrics": [
+        {"kind": "measure", "name": "Net Sales"},
+        {"kind": "measure", "name": "Gross Profit"}
+      ],
+      "group_by": ["DimStore[City]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-003",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["DimCustomer[CustomerSegment]"],
+      "column_filters": [
+        {"field": "FactSales[Channel]", "operator": "eq", "value": "Delivery"}
+      ],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-004",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["DimDate[IsWeekend]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-005",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["DimProduct[Brand]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [
+        {"metric": {"kind": "measure", "name": "Net Sales"}, "direction": "desc"}
+      ],
+      "limit": 5
+    },
+    {
+      "id": "HOLD-006",
+      "metrics": [
+        {
+          "kind": "divide",
+          "numerator": {"kind": "measure", "name": "Net Sales"},
+          "denominator": {"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+        }
+      ],
+      "group_by": [],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-007",
+      "metrics": [{"kind": "measure", "name": "Gross Margin %"}],
+      "group_by": ["DimProduct[Category]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-008",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["FactSales[Channel]"],
+      "column_filters": [],
+      "metric_filters": [
+        {"metric": {"kind": "measure", "name": "Net Sales"}, "operator": "gt", "value": 100000}
+      ],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-009",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["DimDate[YearMonth]"],
+      "column_filters": [
+        {"field": "FactSales[Channel]", "operator": "eq", "value": "In-Store"}
+      ],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-010",
+      "metrics": [{"kind": "measure", "name": "Gross Profit"}],
+      "group_by": ["DimStore[Region]", "DimProduct[Category]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-011",
+      "metrics": [{"kind": "measure", "name": "Net Sales"}],
+      "group_by": ["DimDate[Year]", "DimDate[Quarter]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    },
+    {
+      "id": "HOLD-012",
+      "metrics": [
+        {"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+      ],
+      "group_by": ["FactSales[PaymentMethod]"],
+      "column_filters": [],
+      "metric_filters": [],
+      "order_by": [],
+      "limit": null
+    }
+  ]
+}
