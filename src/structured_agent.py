@@ -1,4 +1,4 @@
-"""Structured-planning BI agent (pipeline v6) for the Streamlit app.
+"""Structured-planning BI agent (pipeline v7) for the Streamlit app.
 
 Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request``
 / ``close`` interface) that runs locally and never executes model-written DAX:
@@ -32,7 +32,7 @@ from evaluation.run_fresh_evaluation import REPAIR_INSTRUCTION_V6
 
 LOGGER = logging.getLogger("insightpilot.structured_agent")
 
-PIPELINE_VERSION = "v6"
+PIPELINE_VERSION = "v7"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 MAX_TABLE_ROWS = 50
 

@@ -40,6 +40,7 @@ for scoring; it is not yet wired into the live app.
 | v4 | + value catalog in prompt, semantic rules 1–2, one repair turn |
 | v5 | + semantic rule 3 (prompt text identical to v4) |
 | v6 | + rule 0 fix-it hints, repair wording that discourages declining fixable mistakes, alias normalisation (prompt text identical to v4) |
+| v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure); used by the Streamlit app |
 
 ## 2. Method
 
@@ -92,8 +93,12 @@ an unbiased estimate.
 | | **v5** | 12 / 12 | **14 / 13** | 3 | 4 | 3 / 0 |
 | fresh_v6 (14 + 6) | v5 | 10 / 10 | 11 / 10 | 6 | 5 | 1 / 1 |
 | | **v6** | 10 / 10 | 12 / **11** | 6 | 5 | 3 / 0 |
+| fresh_v7 (14 + 6) | v6 | 12 / 11 | 10 / 9 | 5 | 4 | 2 / 3 |
+| | **v7** | 12 / 11 | 10 / 9 | 5 | 4 | 2 / 2 |
 
 Set sizes are (answerable incl. one empty-result case + unsupported).
+fresh_v7: FRESH7-012 unexpectedly returns no rows (no month exceeds the
+threshold); it was kept unchanged after reference capture.
 fresh_v2 3B: one execution failure is a single-alias comparator false
 negative (both metrics renamed; values verified identical).
 
@@ -117,6 +122,14 @@ negative (both metrics renamed; values verified identical).
   not act on hints; its failures moved from wrong/invalid plans to declines
   (over-refusals 1 → 3, same correct count). Hints listing available measures
   did not induce substitute answers for undefined metrics.
+* **Expression-kind hints (v7).** No measured accuracy change on fresh_v7
+  (identical scores; one 7B over-refusal became an invalid plan). The hint
+  fired twice for 7B and both repairs were still invalid. Motivated by a live
+  app question ("total units sold by product category" → `kind: "sum"`),
+  which v7 does repair; that question is excluded from all scored sets. The
+  app uses v7 because it did not regress and its failure is an honest
+  "could not build a valid query" rather than a false "measure does not
+  exist".
 
 ## 4. Known limitations
 
@@ -129,6 +142,9 @@ negative (both metrics renamed; values verified identical).
 * **3B ceiling.** 3B frequently uses columns as measures and does not follow
   fix-it hints; its correct declines on unsupported requests also mostly come
   via the repair turn, so removing the decline option would cost declines.
+* **Hints can enable unsupported answers.** On fresh_v7 (v6 and v7), the
+  column-as-measure hint for `Total Orders` (a FactSales column) let 7B
+  answer "total marketing spend by channel" with an unrelated query.
 * **Rule gaps (by design).** Rule 2 allows same-table dimension distinct
   counts (e.g. customers per segment from `DimCustomer`), which can include
   entities without sales (FRESH4-010 fails strict on both models).
@@ -140,9 +156,10 @@ negative (both metrics renamed; values verified identical).
 * **Not yet covered:** row-level security, permission boundaries, data
   freshness, ties beyond deterministic tie-breakers, multi-turn context,
   `IN`-style multi-value filters (not expressible in the plan schema).
-* **Not integrated.** The live Streamlit app still uses the Foundry agent
-  path (`src/powerbi_agent.py`); the structured pipeline lives in
-  `evaluation/`.
+* **App integration is opt-in.** `INSIGHTPILOT_AGENT=structured` runs
+  pipeline v7 in the Streamlit app (`src/structured_agent.py`, local
+  `qwen2.5-coder:7b`); the default remains the original Foundry agent.
+  Requirement coverage is not applied live (it needs a requirement spec).
 
 ## 5. Provenance
 
@@ -155,6 +172,8 @@ negative (both metrics renamed; values verified identical).
 | `7ce6bf1` → `139d16a` | v4 pipeline → fresh_v4 set |
 | `fd22675` → `7f80e22` | v5 (rule 3) → fresh_v5 set |
 | `65843c1` → `74e27ff` | v6 → fresh_v6 set |
+| `22adf9b` | Streamlit integration (opt-in) |
+| `b01145b` → `ed45eeb` | v7 → fresh_v7 set |
 
 ## 6. Reproducing
 
@@ -163,9 +182,17 @@ From the project root in the activated `.venv`:
 ```
 python -m pytest tests/ -q
 python -m evaluation.run_query_plan_evaluation                 # HOLD set
-python -m evaluation.run_fresh_evaluation references --set fresh_v6
-python -m evaluation.run_fresh_evaluation generate   --set fresh_v6 --prompt v6
-python -m evaluation.run_fresh_evaluation evaluate   --set fresh_v6 --prompt v6
+python -m evaluation.run_fresh_evaluation references --set fresh_v7
+python -m evaluation.run_fresh_evaluation generate   --set fresh_v7 --prompt v7
+python -m evaluation.run_fresh_evaluation evaluate   --set fresh_v7 --prompt v7
+```
+
+Run the app with the structured agent (stop running instances first):
+
+```
+.\stop_streamlit.ps1
+$env:INSIGHTPILOT_AGENT = "structured"
+python -m streamlit run src/main.py
 ```
 
 Every stage refuses to overwrite an existing result file; delete or move a
