@@ -54,18 +54,119 @@ def _distinct_counts(expression):
         yield from _distinct_counts(expression.get("denominator"))
 
 
+def _expressions(expression):
+    if not isinstance(expression, dict):
+        return
+    yield expression
+    if expression.get("kind") == "divide":
+        yield from _expressions(expression.get("numerator"))
+        yield from _expressions(expression.get("denominator"))
+
+
+def check_reference_hints(plan, model=None):
+    """Rule 0 (pipeline v6): fix-it messages for misplaced references.
+
+    Only references that exist elsewhere in the model get a "use X instead"
+    hint. A measure that does not exist anywhere keeps clarification as the
+    suggested path, so undefined metrics are not pushed into substitutes.
+    """
+
+    model = load_model() if model is None else model
+    tables = {
+        table["Name"]: {column["Name"] for column in table.get("Columns", [])}
+        for table in model["Tables"]
+    }
+    measures = sorted(
+        measure["Name"]
+        for table in model["Tables"]
+        for measure in table.get("Measures", [])
+    )
+    owners = {}
+    for table, columns in tables.items():
+        for column in columns:
+            owners.setdefault(column.casefold(), []).append(f"{table}[{column}]")
+
+    def column_hint(table, column):
+        if table in tables and column in tables[table]:
+            return
+        found = owners.get(str(column).casefold())
+        if found:
+            raise ValueError(
+                f"{table}[{column}] does not exist. The column {column} is "
+                f"{' / '.join(found)}; reference it with that table."
+            )
+
+    for metric in plan.get("metrics", []) or []:
+        if not isinstance(metric, dict):
+            continue
+        for expression in _expressions(metric.get("expression")):
+            kind = expression.get("kind")
+            if kind == "measure":
+                name = expression.get("name")
+                if name in measures:
+                    continue
+                found = owners.get(str(name).casefold())
+                if found:
+                    raise ValueError(
+                        f"'{name}' is not a measure; it is the column "
+                        f"{' / '.join(found)}. Use it in group_by or in a "
+                        f"column filter, and use an existing measure as the "
+                        f"metric (measures: {', '.join(measures)})."
+                    )
+                raise ValueError(
+                    f"No measure named '{name}' exists. Available measures: "
+                    f"{', '.join(measures)}. If the question needs a metric "
+                    f"the model does not contain, return a clarification."
+                )
+            if kind == "distinct_count":
+                column_hint(expression.get("table"), expression.get("column"))
+
+    group_refs = {}
+    for item in plan.get("group_by", []) or []:
+        if isinstance(item, dict):
+            column_hint(item.get("table"), item.get("column"))
+            group_refs[str(item.get("column")).casefold()] = (
+                f"{item.get('table')}[{item.get('column')}]")
+    for condition in plan.get("filters", []) or []:
+        if isinstance(condition, dict) and condition.get("type") == "column":
+            column_hint(condition.get("table"), condition.get("column"))
+
+    aliases = {
+        metric.get("alias") for metric in plan.get("metrics", []) or []
+        if isinstance(metric, dict)
+    }
+    for item in plan.get("order_by", []) or []:
+        if not isinstance(item, dict):
+            continue
+        field = item.get("field")
+        if field in aliases or field in group_refs.values():
+            continue
+        qualified = group_refs.get(str(field).casefold())
+        if qualified:
+            raise ValueError(
+                f"Sort field '{field}' must be written as {qualified}."
+            )
+
+    return plan
+
+
 def check_semantic_rules(plan, catalog=None, model=None,
-                         reject_single_value_grouping=False):
+                         reject_single_value_grouping=False,
+                         reference_hints=False):
     """Raise ``ValueError`` with an actionable message, else return plan.
 
     ``reject_single_value_grouping`` enables rule 3 (pipeline v5): a column
     that is filtered to one value with ``eq`` must not also be grouped by,
     because the grouping only adds a constant column. ``ne`` filters are
     unaffected ("by channel, excluding Delivery" is legitimate).
+    ``reference_hints`` enables rule 0 (pipeline v6), run first.
     """
 
     catalog = load_catalog() if catalog is None else catalog
     model = load_model() if model is None else model
+
+    if reference_hints:
+        check_reference_hints(plan, model)
 
     # Rule 3 (optional): grouping by a column filtered to a single value.
     if reject_single_value_grouping:

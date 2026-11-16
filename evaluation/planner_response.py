@@ -19,6 +19,7 @@ from jsonschema import Draft202012Validator
 
 from evaluation.query_plan_validator import validate_query_plan
 from evaluation.request_guard import screen_request
+from evaluation.plan_normalization import sanitize_aliases
 from evaluation.semantic_checks import check_semantic_rules
 
 EVAL = Path(__file__).resolve().parent
@@ -64,16 +65,24 @@ def parse_planner_response(raw, semantic_checks=False):
             "message": detail["message"],
         }
 
+    normalizations = []
+    if semantic_checks == "v6":
+        payload, normalizations = sanitize_aliases(payload)
+
     if semantic_checks:
         # Run first: its messages are more actionable for repair (e.g. it
         # lists allowed values where the validator only reports a type error).
-        # semantic_checks=True -> pipeline v4 rules; "v5" adds rule 3.
+        # True -> pipeline v4 rules; "v5" adds rule 3; "v6" adds rule 0 hints.
         check_semantic_rules(
             payload,
-            reject_single_value_grouping=(semantic_checks == "v5"),
+            reject_single_value_grouping=semantic_checks in ("v5", "v6"),
+            reference_hints=semantic_checks == "v6",
         )
     validate_query_plan(payload)
-    return {"kind": "plan", "plan": payload}
+    result = {"kind": "plan", "plan": payload}
+    if normalizations:
+        result["normalizations"] = normalizations
+    return result
 
 
 def plan_question(question, generate_raw, use_guard=True):

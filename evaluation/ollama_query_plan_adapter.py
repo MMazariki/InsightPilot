@@ -69,6 +69,8 @@ PROMPT_FILES = {
     "v4": "query_plan_prompt_v4.txt",
     # v5 changes the pipeline (semantic rule 3), not the prompt text.
     "v5": "query_plan_prompt_v4.txt",
+    # v6 changes repair wording, hints and alias normalisation, not the prompt.
+    "v6": "query_plan_prompt_v4.txt",
 }
 
 

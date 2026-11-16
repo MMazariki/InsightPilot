@@ -66,29 +66,44 @@ SETS = {
     "fresh_v3": "fresh_cases_v3.json",
     "fresh_v4": "fresh_cases_v4.json",
     "fresh_v5": "fresh_cases_v5.json",
+    "fresh_v6": "fresh_cases_v6.json",
 }
-PROMPTS = ("v1", "v2", "v3", "v4", "v5")
+PROMPTS = ("v1", "v2", "v3", "v4", "v5", "v6")
 # Prompts whose pipeline adds semantic checks and one validator-feedback
 # repair attempt for rejected plans.
-REPAIR_PROMPTS = {"v4", "v5"}
+REPAIR_PROMPTS = {"v4", "v5", "v6"}
 REPAIR_INSTRUCTION = (
     "Your previous response was rejected: {error}\n"
     "Return a corrected JSON object: either a query plan that fixes this "
     "problem or a clarification object. Return JSON only."
 )
+# Pipeline v6: prefer fixing the plan; decline only if the question itself
+# cannot be answered (v4/v5 wording led 3B to decline answerable questions).
+REPAIR_INSTRUCTION_V6 = (
+    "Your previous response was rejected: {error}\n"
+    "Fix the query plan so that it answers the user's question with the "
+    "SEMANTIC MODEL. Only return a clarification object if the question "
+    "itself cannot be answered from the model; a fixable mistake in your plan "
+    "is not a reason to decline. Return JSON only."
+)
 
 
 def semantic_level(prompt):
-    """Semantic checks per pipeline: none (v1-v3), v4 rules, v4 + rule 3."""
+    """Semantic checks per pipeline: none (v1-v3), v4 rules, v4 + rule 3,
+    v4 + rule 3 + rule 0 hints and alias normalisation (v6)."""
 
-    if prompt == "v5":
-        return "v5"
+    if prompt in ("v5", "v6"):
+        return prompt
     return prompt in REPAIR_PROMPTS
+
+
+def repair_instruction(prompt):
+    return REPAIR_INSTRUCTION_V6 if prompt == "v6" else REPAIR_INSTRUCTION
 
 # Comparator per case set is fixed so every arm on a set is scored by the same
 # rule. fresh_v1/fresh_v2 were scored with the single-alias comparator; later
 # sets tolerate several renamed metrics (values remain strict).
-MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5"}
+MULTI_ALIAS_SETS = {"fresh_v3", "fresh_v4", "fresh_v5", "fresh_v6"}
 
 
 def comparators_for(set_name):
@@ -242,6 +257,11 @@ def plan_record(case, model, raw, prompt="v1"):
                 payload, semantic_checks=semantic_level(prompt))
             if parsed["kind"] == "plan":
                 record["status"] = "valid_plan"
+                if parsed.get("normalizations"):
+                    # Keep the model's original output in raw_response and
+                    # store the normalised plan that is compiled/executed.
+                    record["plan"] = parsed["plan"]
+                    record["normalizations"] = parsed["normalizations"]
             else:
                 del record["plan"]
                 record["clarification"] = {"reason": parsed["reason"],
@@ -266,7 +286,7 @@ def attempt_repair(case, model, instructions, record, prompt, chat,
         {"role": "user", "content": case["question"]},
         {"role": "assistant", "content": record.get("raw_response", "")},
         {"role": "user",
-         "content": REPAIR_INSTRUCTION.format(error=record.get("error"))},
+         "content": repair_instruction(prompt).format(error=record.get("error"))},
     ]
 
     def call(model_name, question, system):
