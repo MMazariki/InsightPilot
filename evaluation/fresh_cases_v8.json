@@ -1,0 +1,189 @@
+{
+  "version": 8,
+  "description": "Eighth fresh held-out set, authored 2026-11-16 AFTER pipeline v8 (decline path in the column-as-measure hint) was committed (0179ad4), and committed before any reference capture or model generation on it. Used for a same-case A/B of pipeline v7 vs v8. Answerable questions include existing measures with KPI-like names (over-refusal probes) and column-named breakdowns; unsupported questions include metrics that exist only as raw columns the plan schema cannot aggregate (substitution probes). The fresh_v7 marketing-spend question that motivated v8 is excluded.",
+  "cases": [
+    {
+      "id": "FRESH8-001", "category": "answerable", "probe": "kpi_named_measure",
+      "question": "Show the sales target by store region.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Sales Target"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    \"Sales Target\", [Sales Target]\n)"
+    },
+    {
+      "id": "FRESH8-002", "category": "answerable", "probe": "kpi_named_measure",
+      "question": "What is the sales variance for each store region?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Sales Variance"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    \"Sales Variance\", [Sales Variance]\n)"
+    },
+    {
+      "id": "FRESH8-003", "category": "answerable", "probe": "column_named",
+      "question": "Show net sales by payment method for the Click & Collect channel.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["FactSales[PaymentMethod]"],
+        "column_filters": [{"field": "FactSales[Channel]", "operator": "eq", "value": "Click & Collect"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[PaymentMethod],\n    TREATAS({\"Click & Collect\"}, 'FactSales'[Channel]),\n    \"Net Sales\", [Net Sales]\n)"
+    },
+    {
+      "id": "FRESH8-004", "category": "answerable", "probe": "column_named",
+      "question": "How many units were sold for each subcategory in the Accessories category?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimProduct[Subcategory]"],
+        "column_filters": [{"field": "DimProduct[Category]", "operator": "eq", "value": "Accessories"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimProduct'[Subcategory],\n    TREATAS({\"Accessories\"}, 'DimProduct'[Category]),\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH8-005", "category": "answerable", "probe": "column_named",
+      "question": "Show gross profit by customer gender.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Profit"}],
+        "group_by": ["DimCustomer[Gender]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[Gender],\n    \"Gross Profit\", [Gross Profit]\n)"
+    },
+    {
+      "id": "FRESH8-006", "category": "answerable", "probe": "general",
+      "question": "Which three store cities had the lowest net sales?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimStore[City]"],
+        "column_filters": [], "metric_filters": [],
+        "order_by": [{"metric": {"kind": "measure", "name": "Net Sales"}, "direction": "asc"}],
+        "limit": 3
+      },
+      "reference_dax": "EVALUATE\nTOPN(\n    3,\n    SUMMARIZECOLUMNS(\n        'DimStore'[City],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales], ASC,\n    'DimStore'[City], ASC\n)\nORDER BY [Net Sales] ASC, 'DimStore'[City] ASC"
+    },
+    {
+      "id": "FRESH8-007", "category": "answerable", "probe": "column_named",
+      "question": "How many distinct orders used each payment method in the Western region?",
+      "requirement": {
+        "metrics": [{"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}],
+        "group_by": ["FactSales[PaymentMethod]"],
+        "column_filters": [{"field": "DimStore[Region]", "operator": "eq", "value": "Western"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[PaymentMethod],\n    TREATAS({\"Western\"}, 'DimStore'[Region]),\n    \"Distinct Orders\", DISTINCTCOUNT('FactSales'[OrderID])\n)"
+    },
+    {
+      "id": "FRESH8-008", "category": "answerable", "probe": "column_named",
+      "question": "Show total discounts by store type and sales channel.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Total Discounts"}],
+        "group_by": ["DimStore[StoreType]", "FactSales[Channel]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[StoreType],\n    'FactSales'[Channel],\n    \"Total Discounts\", [Total Discounts]\n)"
+    },
+    {
+      "id": "FRESH8-009", "category": "answerable", "probe": "column_named",
+      "question": "Show net sales by customer city.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimCustomer[City]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[City],\n    \"Net Sales\", [Net Sales]\n)"
+    },
+    {
+      "id": "FRESH8-010", "category": "answerable", "probe": "general",
+      "question": "What is gross profit per distinct customer in each store region?",
+      "requirement": {
+        "metrics": [{
+          "kind": "divide",
+          "numerator": {"kind": "measure", "name": "Gross Profit"},
+          "denominator": {"kind": "distinct_count", "table": "FactSales", "column": "CustomerKey"}
+        }],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    \"Gross Profit per Customer\", DIVIDE([Gross Profit], DISTINCTCOUNT('FactSales'[CustomerKey]))\n)"
+    },
+    {
+      "id": "FRESH8-011", "category": "answerable", "probe": "general",
+      "question": "Show units sold per month for the Snacks category.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimDate[YearMonth]"],
+        "column_filters": [{"field": "DimProduct[Category]", "operator": "eq", "value": "Snacks"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[YearMonth],\n    TREATAS({\"Snacks\"}, 'DimProduct'[Category]),\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH8-012", "category": "empty_result", "probe": "kpi_named_measure",
+      "question": "Which store regions had a sales target below zero?",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Sales Target"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [],
+        "metric_filters": [{"metric": {"kind": "measure", "name": "Sales Target"}, "operator": "lt", "value": 0}],
+        "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'DimStore'[Region],\n        \"Sales Target\", [Sales Target]\n    ),\n    [Sales Target] < 0\n)"
+    },
+    {
+      "id": "FRESH8-013", "category": "unsupported", "probe": "raw_column_metric",
+      "question": "What is the average unit cost by product category?",
+      "note": "UnitCostSAR exists only as a column; the plan schema cannot average a column and no measure provides it.",
+      "expected_reason": "undefined_metric",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-014", "category": "unsupported", "probe": "raw_column_metric",
+      "question": "What is the total store floor area by region?",
+      "note": "AreaSqM exists only as a column; no measure provides it.",
+      "expected_reason": "undefined_metric",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-015", "category": "unsupported",
+      "question": "What is the advertising cost for each store?",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-016", "category": "unsupported",
+      "question": "Show the number of returned items by brand.",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-017", "category": "unsupported",
+      "question": "Forecast next quarter's net sales.",
+      "expected_reason": "out_of_scope",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-018", "category": "unsupported",
+      "question": "How are the numbers looking?",
+      "expected_reason": "ambiguous",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-019", "category": "unsupported",
+      "question": "Change the price of Noura Chips to 10 SAR.",
+      "note": "Write request outside the guard's object vocabulary.",
+      "expected_reason": "write_request",
+      "requirement": {"supported": false}
+    },
+    {
+      "id": "FRESH8-020", "category": "unsupported",
+      "question": "Show staff overtime hours by store.",
+      "expected_reason": "missing_data",
+      "requirement": {"supported": false}
+    }
+  ]
+}
