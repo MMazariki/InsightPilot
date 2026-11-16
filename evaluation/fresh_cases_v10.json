@@ -1,0 +1,155 @@
+{
+  "version": 10,
+  "description": "Tenth fresh held-out set, authored 2026-11-16 AFTER pipeline v11 (no-metric gate trigger) was committed (0a9d34b), and committed before any reference capture or model generation on it. Used for a same-case A/B of pipeline v10 (app) vs v11. Unsupported questions are vague requests written entirely in model vocabulary (no metric named); answerable questions are terse but name their metric, to test that the new trigger does not block them.",
+  "cases": [
+    {
+      "id": "FRESH10-001", "category": "answerable", "probe": "terse",
+      "question": "Units by brand.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimProduct[Brand]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimProduct'[Brand],\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH10-002", "category": "answerable", "probe": "terse",
+      "question": "Profit by store type.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Profit"}],
+        "group_by": ["DimStore[StoreType]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[StoreType],\n    \"Gross Profit\", [Gross Profit]\n)"
+    },
+    {
+      "id": "FRESH10-003", "category": "answerable", "probe": "terse",
+      "question": "Discounts by quarter.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Total Discounts"}],
+        "group_by": ["DimDate[Quarter]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[Quarter],\n    \"Total Discounts\", [Total Discounts]\n)"
+    },
+    {
+      "id": "FRESH10-004", "category": "answerable", "probe": "terse",
+      "question": "How many orders per channel?",
+      "requirement": {
+        "metrics": [{"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}],
+        "group_by": ["FactSales[Channel]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[Channel],\n    \"Distinct Orders\", DISTINCTCOUNT('FactSales'[OrderID])\n)"
+    },
+    {
+      "id": "FRESH10-005", "category": "answerable", "probe": "terse",
+      "question": "Net sales by store region, top three.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [], "metric_filters": [],
+        "order_by": [{"metric": {"kind": "measure", "name": "Net Sales"}, "direction": "desc"}],
+        "limit": 3
+      },
+      "reference_dax": "EVALUATE\nTOPN(\n    3,\n    SUMMARIZECOLUMNS(\n        'DimStore'[Region],\n        \"Net Sales\", [Net Sales]\n    ),\n    [Net Sales], DESC,\n    'DimStore'[Region], ASC\n)\nORDER BY [Net Sales] DESC, 'DimStore'[Region] ASC"
+    },
+    {
+      "id": "FRESH10-006", "category": "answerable", "probe": "terse",
+      "question": "Gross sales for Riyadh stores by month.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Gross Sales"}],
+        "group_by": ["DimDate[YearMonth]"],
+        "column_filters": [{"field": "DimStore[City]", "operator": "eq", "value": "Riyadh"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimDate'[YearMonth],\n    TREATAS({\"Riyadh\"}, 'DimStore'[City]),\n    \"Gross Sales\", [Gross Sales]\n)"
+    },
+    {
+      "id": "FRESH10-007", "category": "answerable", "probe": "terse",
+      "question": "Customers per segment who bought something.",
+      "requirement": {
+        "metrics": [{"kind": "distinct_count", "table": "FactSales", "column": "CustomerKey"}],
+        "group_by": ["DimCustomer[CustomerSegment]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[CustomerSegment],\n    \"Distinct Customers\", DISTINCTCOUNT('FactSales'[CustomerKey])\n)"
+    },
+    {
+      "id": "FRESH10-008", "category": "answerable", "probe": "terse",
+      "question": "Units sold on weekends by channel.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["FactSales[Channel]"],
+        "column_filters": [{"field": "DimDate[IsWeekend]", "operator": "eq", "value": true}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[Channel],\n    TREATAS({TRUE()}, 'DimDate'[IsWeekend]),\n    \"Units Sold\", [Units Sold]\n)"
+    },
+    {
+      "id": "FRESH10-009", "category": "answerable", "probe": "terse",
+      "question": "Gross profit per order by payment method.",
+      "requirement": {
+        "metrics": [{
+          "kind": "divide",
+          "numerator": {"kind": "measure", "name": "Gross Profit"},
+          "denominator": {"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+        }],
+        "group_by": ["FactSales[PaymentMethod]"],
+        "column_filters": [], "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'FactSales'[PaymentMethod],\n    \"Gross Profit per Order\", DIVIDE([Gross Profit], DISTINCTCOUNT('FactSales'[OrderID]))\n)"
+    },
+    {
+      "id": "FRESH10-010", "category": "answerable", "probe": "terse",
+      "question": "Net sales by age band, lowest first.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Net Sales"}],
+        "group_by": ["DimCustomer[AgeBand]"],
+        "column_filters": [], "metric_filters": [],
+        "order_by": [{"metric": {"kind": "measure", "name": "Net Sales"}, "direction": "asc"}],
+        "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimCustomer'[AgeBand],\n    \"Net Sales\", [Net Sales]\n)\nORDER BY [Net Sales] ASC"
+    },
+    {
+      "id": "FRESH10-011", "category": "answerable", "probe": "terse",
+      "question": "Total discounts for Tourist customers by store region.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Total Discounts"}],
+        "group_by": ["DimStore[Region]"],
+        "column_filters": [{"field": "DimCustomer[CustomerSegment]", "operator": "eq", "value": "Tourist"}],
+        "metric_filters": [], "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nSUMMARIZECOLUMNS(\n    'DimStore'[Region],\n    TREATAS({\"Tourist\"}, 'DimCustomer'[CustomerSegment]),\n    \"Total Discounts\", [Total Discounts]\n)"
+    },
+    {
+      "id": "FRESH10-012", "category": "empty_result", "probe": "terse",
+      "question": "Store types with negative units sold.",
+      "requirement": {
+        "metrics": [{"kind": "measure", "name": "Units Sold"}],
+        "group_by": ["DimStore[StoreType]"],
+        "column_filters": [],
+        "metric_filters": [{"metric": {"kind": "measure", "name": "Units Sold"}, "operator": "lt", "value": 0}],
+        "order_by": [], "limit": null
+      },
+      "reference_dax": "EVALUATE\nFILTER(\n    SUMMARIZECOLUMNS(\n        'DimStore'[StoreType],\n        \"Units Sold\", [Units Sold]\n    ),\n    [Units Sold] < 0\n)"
+    },
+    {"id": "FRESH10-013", "category": "unsupported", "question": "Break it down by region.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-014", "category": "unsupported", "question": "Show the breakdown.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-015", "category": "unsupported", "question": "What were the results for Q3?",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-016", "category": "unsupported", "question": "Compare the store types.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-017", "category": "unsupported", "question": "Show the figures by channel.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-018", "category": "unsupported", "question": "What happened in Riyadh?",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-019", "category": "unsupported", "question": "Show everything by month.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}},
+    {"id": "FRESH10-020", "category": "unsupported", "question": "Rank the regions.",
+     "expected_reason": "ambiguous", "requirement": {"supported": false}}
+  ]
+}
