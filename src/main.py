@@ -1,14 +1,32 @@
+import base64
 import os
+import uuid
+from pathlib import Path
 
+import requests
 import streamlit as st
 
 from powerbi_embed_component import powerbi_embed_component
 
 
+APP_NAME = "InsightPilot"
+ASSETS = Path(__file__).resolve().parents[1] / "assets"
+ICON_FILE = ASSETS / "insightpilot.png"
+
 # Agent selection. "foundry" (default) keeps the original Azure AI Foundry
 # agent; "structured" uses the local structured-planning pipeline
 # (src/structured_agent.py: local Ollama + validated plans + read-only DAX).
 AGENT_MODE = os.environ.get("INSIGHTPILOT_AGENT", "foundry").strip().lower()
+
+DETAILS_MARKER = "**Query plan and DAX**"
+FOOTER_MARKER = "_Structured pipeline"
+
+STARTER_QUESTIONS = [
+    "Show gross profit by sales channel.",
+    "Compare net sales across store types.",
+    "Which channel sold the most units?",
+    "Margin % by customer segment.",
+]
 
 
 def create_agent():
@@ -23,11 +41,177 @@ def create_agent():
 
 
 st.set_page_config(
-    page_title="AgenticProject",
-    page_icon="📊",
+    page_title=APP_NAME,
+    page_icon=str(ICON_FILE) if ICON_FILE.exists() else "🧭",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+
+# =====================================================
+# STYLE
+# =====================================================
+
+st.html(
+    """
+<style>
+:root {
+    --ip-ink: #101828;
+    --ip-muted: #667085;
+    --ip-line: #E4E7EC;
+    --ip-surface: #FFFFFF;
+    --ip-canvas: #F4F6FB;
+    --ip-navy: #0B1F4B;
+    --ip-blue: #2251D1;
+    --ip-teal: #14B8A6;
+}
+
+/* Page chrome */
+[data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu, footer {
+    display: none !important;
+}
+[data-testid="stAppViewContainer"], .stApp { background: var(--ip-canvas); }
+.block-container {
+    padding: 1.1rem 1.6rem 1.2rem 1.6rem;
+    max-width: 1720px;
+}
+html, body, .stApp, .stMarkdown, button, input, textarea {
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+        "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Brand bar */
+.ip-brand {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    padding: 16px 22px;
+    border-radius: 16px;
+    background: linear-gradient(110deg, #0B1F4B 0%, #16337E 55%, #2251D1 100%);
+    color: #fff;
+    box-shadow: 0 10px 30px -14px rgba(11, 31, 75, .55);
+}
+.ip-brand-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.ip-logo {
+    flex: none; border-radius: 22%;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .28), 0 6px 16px -6px rgba(0, 0, 0, .5);
+}
+.ip-welcome-logo { display: inline-block; box-shadow: 0 10px 24px -10px rgba(11, 31, 75, .6); border-radius: 22%; }
+.ip-name {
+    font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; line-height: 1.1;
+}
+.ip-name span { color: #5EEAD4; }
+.ip-tag { font-size: .86rem; color: rgba(255, 255, 255, .74); margin-top: 3px; }
+.ip-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.ip-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 999px;
+    font-size: .8rem; font-weight: 500; white-space: nowrap;
+    background: rgba(255, 255, 255, .1);
+    border: 1px solid rgba(255, 255, 255, .16);
+    color: rgba(255, 255, 255, .92);
+}
+.ip-dot { width: 8px; height: 8px; border-radius: 50%; background: #98A2B3; }
+.ip-dot.ok { background: #34D399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .22); }
+.ip-dot.bad { background: #F97066; box-shadow: 0 0 0 3px rgba(249, 112, 102, .22); }
+
+/* Cards */
+.st-key-chat_card, .st-key-report_card {
+    background: var(--ip-surface);
+    border: 1px solid var(--ip-line) !important;
+    border-radius: 16px !important;
+    padding: 18px 20px 16px 20px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px -18px rgba(16, 24, 40, .25);
+}
+.ip-card-title {
+    font-size: 1.05rem; font-weight: 650; color: var(--ip-ink); line-height: 1.2;
+}
+.ip-card-sub { font-size: .84rem; color: var(--ip-muted); margin-top: 2px; }
+
+/* Conversation area */
+.st-key-chat_scroll {
+    border: none !important; background: transparent; padding: 0 !important;
+}
+[data-testid="stChatMessage"] {
+    background: transparent; padding: .55rem .2rem; gap: .7rem;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    background: #EEF3FF; border-radius: 14px; padding: .65rem .9rem;
+}
+[data-testid="stChatMessage"] table {
+    font-size: .88rem; border-collapse: separate; border-spacing: 0;
+    border: 1px solid var(--ip-line); border-radius: 10px; overflow: hidden;
+    font-variant-numeric: tabular-nums;
+}
+[data-testid="stChatMessage"] th {
+    background: #F2F4F8; color: #344054; font-weight: 600; text-align: left;
+    border: none !important; border-bottom: 1px solid var(--ip-line) !important;
+}
+[data-testid="stChatMessage"] td {
+    border: none !important; border-bottom: 1px solid #F0F2F5 !important;
+}
+[data-testid="stChatMessage"] tr:last-child td { border-bottom: none !important; }
+[data-testid="stChatMessage"] td:not(:first-child),
+[data-testid="stChatMessage"] th:not(:first-child) { text-align: right; }
+
+/* Welcome */
+.ip-welcome { text-align: center; padding: 34px 12px 6px 12px; }
+.ip-welcome h3 {
+    font-size: 1.3rem; font-weight: 650; color: var(--ip-ink);
+    margin: 12px 0 4px 0; padding: 0;
+}
+.ip-welcome p { color: var(--ip-muted); font-size: .93rem; margin: 0; }
+.ip-try {
+    font-size: .74rem; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: #98A2B3; margin: 22px 0 2px 2px;
+}
+.st-key-starters button {
+    width: 100%; min-height: 58px; text-align: left; justify-content: flex-start;
+    border-radius: 12px; border: 1px solid var(--ip-line);
+    background: #FAFBFD; color: var(--ip-ink); font-weight: 500;
+    transition: border-color .15s, background .15s, transform .15s;
+}
+.st-key-starters button:hover {
+    border-color: var(--ip-blue); background: #F1F5FF; color: var(--ip-blue);
+    transform: translateY(-1px);
+}
+.st-key-starters button p { font-size: .9rem; }
+
+/* Buttons and input */
+.st-key-new_chat button {
+    border-radius: 10px; border: 1px solid var(--ip-line);
+    color: #344054; font-weight: 500; background: #fff;
+}
+.st-key-new_chat button:hover { border-color: var(--ip-blue); color: var(--ip-blue); }
+[data-testid="stChatInput"] {
+    border-radius: 14px; border: 1px solid #D0D5DD; background: #fff;
+}
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] textarea { background: #fff !important; }
+[data-testid="stChatInput"] > div { border: none !important; border-radius: 14px; }
+[data-testid="stChatInput"]:focus-within {
+    border-color: var(--ip-blue); box-shadow: 0 0 0 3px rgba(34, 81, 209, .14);
+}
+[data-testid="stExpander"] details {
+    border-radius: 10px; border-color: var(--ip-line); background: #FAFBFD;
+}
+[data-testid="stExpander"] summary p { font-size: .85rem; color: #475467; }
+.ip-foot { text-align: center; color: #98A2B3; font-size: .76rem; margin-top: 10px; }
+</style>
+"""
+)
+
+def _logo_html(size):
+    if not ICON_FILE.exists():
+        return ""
+    encoded = base64.b64encode(ICON_FILE.read_bytes()).decode("ascii")
+    return (
+        f'<img src="data:image/png;base64,{encoded}" width="{size}" '
+        f'height="{size}" alt="" style="display:block;border-radius:22%;">'
+    )
+
+
+LOGO_SMALL = _logo_html(46)
+LOGO_LARGE = _logo_html(60)
 
 
 # =====================================================
@@ -41,23 +225,94 @@ if "agent" not in st.session_state:
     st.session_state.agent = None
 if "visual_request" not in st.session_state:
     st.session_state.visual_request = None
+if "queued_prompt" not in st.session_state:
+    st.session_state.queued_prompt = None
+
+
+def queue_prompt(question):
+    st.session_state.queued_prompt = question
+
+
+def reset_conversation():
+    st.session_state.messages = []
+    st.session_state.visual_request = None
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def local_model_online():
+    try:
+        return requests.get(
+            "http://localhost:11434/api/tags", timeout=1.5
+        ).ok
+    except requests.RequestException:
+        return False
+
+
+def render_answer(content):
+    """Show an assistant message; the query plan and DAX go in an expander."""
+
+    if DETAILS_MARKER not in content:
+        st.markdown(content)
+        return
+
+    body, rest = content.split(DETAILS_MARKER, 1)
+    details, separator, footer = rest.rpartition(FOOTER_MARKER)
+    if not separator:
+        details, footer = rest, ""
+
+    st.markdown(body.strip())
+    with st.expander("How this was answered: query plan and DAX"):
+        st.markdown(details.strip())
+        if footer:
+            st.caption(("Structured pipeline" + footer).strip().rstrip("_"))
 
 
 # =====================================================
 # APPLICATION HEADER
 # =====================================================
 
-st.title("AgenticProject")
-st.caption(
-    "AI-powered Business Intelligence | "
-    + (
-        "Local structured planning + Power BI"
-        if AGENT_MODE == "structured"
-        else "Azure AI Foundry + Power BI"
+if AGENT_MODE == "structured":
+    from src.structured_agent import DEFAULT_MODEL, PIPELINE_VERSION
+
+    model_name = os.environ.get("INSIGHTPILOT_PLANNER_MODEL", DEFAULT_MODEL)
+    online = local_model_online()
+    pills = (
+        f'<span class="ip-pill"><span class="ip-dot {"ok" if online else "bad"}">'
+        f'</span>Local model {"online" if online else "offline"} · {model_name}</span>'
+        f'<span class="ip-pill">Pipeline {PIPELINE_VERSION}</span>'
+        '<span class="ip-pill">Read-only Power BI</span>'
     )
+    tagline = "Ask your sales data in plain language. Answers come from validated, read-only queries."
+else:
+    online = True
+    pills = (
+        '<span class="ip-pill">Azure AI Foundry agent</span>'
+        '<span class="ip-pill">Power BI</span>'
+    )
+    tagline = "AI-powered business intelligence on your Power BI model."
+
+st.html(
+    f"""
+<div class="ip-brand">
+  <div class="ip-brand-left">
+    <div class="ip-logo">{LOGO_SMALL}</div>
+    <div>
+      <div class="ip-name">Insight<span>Pilot</span></div>
+      <div class="ip-tag">{tagline}</div>
+    </div>
+  </div>
+  <div class="ip-pills">{pills}</div>
+</div>
+"""
 )
 
-st.divider()
+if not online:
+    st.warning(
+        "The local model service (Ollama) is not responding, so questions "
+        "cannot be answered yet. Start Ollama, or use the Restart "
+        "InsightPilot shortcut, then ask again.",
+        icon=":material/cloud_off:",
+    )
 
 
 # =====================================================
@@ -65,8 +320,8 @@ st.divider()
 # =====================================================
 
 chat_column, report_column = st.columns(
-    [1, 1],
-    gap="large",
+    [5, 6],
+    gap="medium",
 )
 
 
@@ -74,31 +329,69 @@ chat_column, report_column = st.columns(
 # LEFT PANEL - BI AGENT
 # =====================================================
 
-with chat_column:
+with chat_column, st.container(border=True, key="chat_card"):
 
-    st.subheader("BI Agent")
-    st.caption("Ask questions about your business data.")
+    title_column, action_column = st.columns([3, 1], vertical_alignment="center")
+    with title_column:
+        st.html(
+            '<div class="ip-card-title">Ask InsightPilot</div>'
+            '<div class="ip-card-sub">Questions about sales, profit, units, '
+            "discounts and targets.</div>"
+        )
+    with action_column:
+        st.button(
+            "New chat",
+            key="new_chat",
+            icon=":material/add_comment:",
+            on_click=reset_conversation,
+            disabled=not st.session_state.messages,
+            use_container_width=True,
+        )
 
-    chat_container = st.container(height=620)
-
-    with chat_container:
-
-        if not st.session_state.messages:
-
-            st.info(
-                "Welcome to AgenticProject. "
-                "Ask a business question to get started."
-            )
-
-        for message in st.session_state.messages:
-
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    chat_container = st.container(height=735, border=False, key="chat_scroll")
 
     prompt = st.chat_input(
         "Ask a business question...",
         key="agent_chat_input",
     )
+    if st.session_state.queued_prompt:
+        prompt = st.session_state.queued_prompt
+        st.session_state.queued_prompt = None
+
+    with chat_container:
+
+        if not st.session_state.messages and not prompt:
+
+            st.html(
+                f"""
+<div class="ip-welcome">
+  <div class="ip-welcome-logo">{LOGO_LARGE}</div>
+  <h3>What would you like to know?</h3>
+  <p>Ask in your own words. InsightPilot plans a query, checks it,
+     and reads the answer from Power BI.</p>
+</div>
+<div class="ip-try">Try one of these</div>
+"""
+            )
+            with st.container(key="starters"):
+                left, right = st.columns(2)
+                for index, question in enumerate(STARTER_QUESTIONS):
+                    (left if index % 2 == 0 else right).button(
+                        question,
+                        key=f"starter_{index}",
+                        on_click=queue_prompt,
+                        args=(question,),
+                        use_container_width=True,
+                    )
+
+        for message in st.session_state.messages:
+
+            if message["role"] == "user":
+                with st.chat_message("user", avatar=":material/person:"):
+                    st.markdown(message["content"])
+            else:
+                with st.chat_message("assistant", avatar=":material/explore:"):
+                    render_answer(message["content"])
 
     if prompt:
 
@@ -107,38 +400,41 @@ with chat_column:
             "content": prompt,
         })
 
-        with st.spinner("Analyzing your data..."):
+        with chat_container:
+            with st.chat_message("user", avatar=":material/person:"):
+                st.markdown(prompt)
 
-            try:
+            with st.chat_message("assistant", avatar=":material/explore:"):
+                with st.spinner("Planning the query and reading Power BI..."):
 
-                if st.session_state.agent is None:
-                    st.session_state.agent = create_agent()
+                    try:
 
-                answer = st.session_state.agent.ask(prompt)
-                if st.session_state.agent.pending_visual_request:
-                    import uuid
+                        if st.session_state.agent is None:
+                            st.session_state.agent = create_agent()
 
-                    st.session_state.visual_request = {
-                        **st.session_state.agent.pending_visual_request,
-                        "requestId": str(uuid.uuid4()),
-                    }
+                        answer = st.session_state.agent.ask(prompt)
+                        if st.session_state.agent.pending_visual_request:
+                            st.session_state.visual_request = {
+                                **st.session_state.agent.pending_visual_request,
+                                "requestId": str(uuid.uuid4()),
+                            }
 
-                    print(
-                        "[STREAMLIT] Visual request received:",
-                        st.session_state.visual_request
-                    )
+                            print(
+                                "[STREAMLIT] Visual request received:",
+                                st.session_state.visual_request
+                            )
 
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": answer,
-                })
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": answer,
+                        })
 
-            except Exception as exc:
+                    except Exception as exc:
 
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"**Error:** {exc}",
-                })
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": f"**Error:** {exc}",
+                        })
 
         st.rerun()
 
@@ -147,12 +443,20 @@ with chat_column:
 # RIGHT PANEL - POWER BI REPORT
 # =====================================================
 
-with report_column:
+with report_column, st.container(border=True, key="report_card"):
 
-    st.subheader("Power BI Report")
-    st.caption("Interactive AgenticProject semantic model.")
+    st.html(
+        '<div class="ip-card-title">Power BI report</div>'
+        '<div class="ip-card-sub">Live interactive report on the same '
+        "semantic model.</div>"
+    )
 
     powerbi_embed_component(
         key="main-powerbi-report",
         visual_request=st.session_state.visual_request,
     )
+
+st.html(
+    f'<div class="ip-foot">{APP_NAME} · runs on this computer · '
+    "queries are read-only</div>"
+)

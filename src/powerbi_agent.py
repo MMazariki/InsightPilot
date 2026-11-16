@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     try:
 
-        print("\nAgenticProject BI Agent")
+        print("\nInsightPilot BI Agent")
         print("----------------------")
 
         while True:

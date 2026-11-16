@@ -51,3 +51,6 @@ htmlcov/
 
 # Local evaluation results
 evaluation/results/
+
+# InsightPilot launcher runtime files
+logs/
