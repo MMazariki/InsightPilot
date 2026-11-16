@@ -42,7 +42,8 @@ for scoring; it is not yet wired into the live app.
 | v6 | + rule 0 fix-it hints, repair wording that discourages declining fixable mistakes, alias normalisation (prompt text identical to v4) |
 | v7 | + rule 0b expression-kind hints (e.g. `sum` over a measure name → use the measure) |
 | v8 | + decline path appended to the column-as-measure hint (rejected: regressed on fresh_v8) |
-| v9 | v7 + answerability gate: out-of-vocabulary question words trigger a verifier that checks the plan answers the question; **used by the Streamlit app** |
+| v9 | v7 + answerability gate: out-of-vocabulary question words trigger a verifier that checks the plan answers the question |
+| v10 | v9 + drop metrics that merely echo a grouping column (semantics-preserving normalisation); **used by the Streamlit app** |
 
 ## 2. Method
 
@@ -151,7 +152,15 @@ negative (both metrics renamed; values verified identical).
   (12/12, 11 strict), unsupported questions answered anyway 2 → 0, declined
   5 → 7, no over-refusals; the verifier passed all 6 answerable questions
   containing benign unknown words. 3B: one gain (a what-if) and one false
-  block ("best to worst" judged not a metric). The app (7B) now uses v9.
+  block ("best to worst" judged not a metric). The app (7B) adopted v9.
+* **Grouped-column echo normalisation (v10).** A live app question ("gross
+  profit by sales channel") failed because 7B also listed the grouping
+  column as a `{"kind": "column"}` metric. v10 drops such echoes (the
+  column is already in the result, so the computation is unchanged) and
+  records the change. Evidence is an **offline replay, not a fresh A/B**:
+  all 841 saved model outputs from fresh_v1-v9 re-parsed under v9 and v10
+  gave 4 invalid → valid (all 7B; all fully covered their requirement
+  specs) and 0 other changes. No accuracy gain is claimed beyond that.
 
 ## 4. Known limitations
 
@@ -188,7 +197,7 @@ negative (both metrics renamed; values verified identical).
   freshness, ties beyond deterministic tie-breakers, multi-turn context,
   `IN`-style multi-value filters (not expressible in the plan schema).
 * **App integration is opt-in.** `INSIGHTPILOT_AGENT=structured` runs
-  pipeline v9 in the Streamlit app (`src/structured_agent.py`, local
+  pipeline v10 in the Streamlit app (`src/structured_agent.py`, local
   `qwen2.5-coder:7b`); the default remains the original Foundry agent.
   Requirement coverage is not applied live (it needs a requirement spec).
 
@@ -207,6 +216,7 @@ negative (both metrics renamed; values verified identical).
 | `b01145b` → `ed45eeb` | v7 → fresh_v7 set |
 | `0179ad4` → `fee3de4` | v8 → fresh_v8 set (v8 rejected) |
 | `5db2a26` → `b89ea7f` | v9 → fresh_v9 set (app switched to v9) |
+| (this commit) | v10 normalisation, offline replay, app switched to v10 |
 
 ## 6. Reproducing
 

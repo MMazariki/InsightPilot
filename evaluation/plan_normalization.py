@@ -65,3 +65,57 @@ def sanitize_aliases(plan):
         for old, new in renamed.items()
     ]
     return result, changes
+
+
+COLUMN_LIKE_KINDS = {"column", "dimension", "field", "attribute"}
+
+
+def drop_grouped_column_metrics(plan):
+    """Return ``(plan_copy, changes)`` without metrics that only echo a
+    grouping column (pipeline v10).
+
+    Models sometimes list a grouping column again as a metric, e.g.
+    ``{"kind": "column", "table": "FactSales", "column": "Channel"}`` while
+    also grouping by FactSales[Channel]. The grouping column is already in
+    the result, so removing the echo does not change what is computed. Sort
+    items that referenced the echo's alias are pointed at the grouping
+    column. Nothing is removed if it would leave no metrics.
+    """
+
+    if not isinstance(plan, dict) or not isinstance(plan.get("metrics"), list):
+        return plan, []
+
+    grouped = {
+        (item.get("table"), item.get("column"))
+        for item in plan.get("group_by", []) or []
+        if isinstance(item, dict)
+    }
+
+    def is_echo(metric):
+        expression = metric.get("expression") if isinstance(metric, dict) else None
+        return (isinstance(expression, dict)
+                and expression.get("kind") in COLUMN_LIKE_KINDS
+                and (expression.get("table"), expression.get("column")) in grouped)
+
+    echoes = [metric for metric in plan["metrics"] if is_echo(metric)]
+    if not echoes or len(echoes) == len(plan["metrics"]):
+        return plan, []
+
+    result = copy.deepcopy(plan)
+    result["metrics"] = [metric for metric in result["metrics"]
+                         if not is_echo(metric)]
+    redirected = {
+        metric.get("alias"):
+        f"{metric['expression']['table']}[{metric['expression']['column']}]"
+        for metric in echoes
+    }
+    for item in result.get("order_by", []) or []:
+        if isinstance(item, dict) and item.get("field") in redirected:
+            item["field"] = redirected[item["field"]]
+
+    changes = [
+        {"kind": "grouped_column_metric_dropped", "alias": alias,
+         "column": column}
+        for alias, column in redirected.items()
+    ]
+    return result, changes

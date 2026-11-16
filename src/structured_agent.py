@@ -1,10 +1,11 @@
-"""Structured-planning BI agent (pipeline v9) for the Streamlit app.
+"""Structured-planning BI agent (pipeline v10) for the Streamlit app.
 
 Drop-in alternative to ``PowerBIAgent`` (same ``ask`` / ``pending_visual_request``
 / ``close`` interface) that runs locally and never executes model-written DAX:
 
     request guard -> local Ollama planner (plan or clarification)
-    -> alias normalisation + semantic checks + schema/model validation
+    -> normalisation (grouped-column echoes, aliases) + semantic checks
+       + schema/model validation
     -> at most one repair turn with the rejection message
     -> answerability gate (verifier only for out-of-vocabulary wording)
     -> deterministic DAX compiler -> read-only Power BI ExecuteQueries
@@ -34,7 +35,7 @@ from evaluation.run_fresh_evaluation import REPAIR_INSTRUCTION_V6
 
 LOGGER = logging.getLogger("insightpilot.structured_agent")
 
-PIPELINE_VERSION = "v9"
+PIPELINE_VERSION = "v10"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 MAX_TABLE_ROWS = 50
 

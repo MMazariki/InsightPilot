@@ -77,6 +77,8 @@ PROMPT_FILES = {
     "v8": "query_plan_prompt_v4.txt",
     # v9 = v7 + answerability gate; prompt unchanged.
     "v9": "query_plan_prompt_v4.txt",
+    # v10 = v9 + grouped-column metric normalisation; prompt unchanged.
+    "v10": "query_plan_prompt_v4.txt",
 }
 
 

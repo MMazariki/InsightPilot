@@ -19,7 +19,10 @@ from jsonschema import Draft202012Validator
 
 from evaluation.query_plan_validator import validate_query_plan
 from evaluation.request_guard import screen_request
-from evaluation.plan_normalization import sanitize_aliases
+from evaluation.plan_normalization import (
+    drop_grouped_column_metrics,
+    sanitize_aliases,
+)
 from evaluation.semantic_checks import check_semantic_rules
 
 EVAL = Path(__file__).resolve().parent
@@ -66,13 +69,18 @@ def parse_planner_response(raw, semantic_checks=False):
         }
 
     normalizations = []
+    if semantic_checks == "v10":
+        # Pipeline v10 = v9 + dropping metrics that echo a grouping column.
+        payload, normalizations = drop_grouped_column_metrics(payload)
+        semantic_checks = "v9"
     if semantic_checks == "v9":
         # Pipeline v9 = v7 checks (v8 rejected) + answerability gate, which
         # runs after parsing in the caller.
         semantic_checks = "v7"
 
     if semantic_checks in ("v6", "v7", "v8"):
-        payload, normalizations = sanitize_aliases(payload)
+        payload, alias_changes = sanitize_aliases(payload)
+        normalizations = normalizations + alias_changes
 
     if semantic_checks:
         # Run first: its messages are more actionable for repair (e.g. it

@@ -197,3 +197,26 @@ def test_gate_not_called_for_in_vocabulary_question():
     agent, calls = make_agent([json.dumps(PLAN)])
     agent.ask("Show net sales by store region.")
     assert calls["chat"] == []
+
+
+def test_agent_accepts_grouped_column_echo_without_repair():
+    # Live v9 failure: "Show gross profit by sales channel".
+    plan = {
+        "metrics": [
+            {"alias": "Gross Profit",
+             "expression": {"kind": "measure", "name": "Gross Profit"}},
+            {"alias": "Sales Channel",
+             "expression": {"kind": "column", "table": "FactSales",
+                            "column": "Channel"}},
+        ],
+        "group_by": [{"table": "FactSales", "column": "Channel"}],
+        "filters": [], "order_by": [], "limit": None,
+    }
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([json.dumps(plan)], powerbi)
+    agent.ask("Show gross profit by sales channel.")
+    assert calls["chat"] == []
+    assert len(powerbi.queries) == 1
+    assert '"Sales Channel"' not in powerbi.queries[0]
+    assert agent.last_trace["normalizations"][0]["kind"] == (
+        "grouped_column_metric_dropped")
