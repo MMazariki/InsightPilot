@@ -191,7 +191,7 @@ negative (both metrics renamed; values verified identical).
 * **Narrower metric-word list (v12, rejected).** v12 removes grouping
   entities from the trigger's metric words so that "Rank the regions."
   reaches the verifier. On unseen fresh_v11 (prompt and parsing identical
-  in both arms) it did
+  in both arms, and all 40 pre-gate plans were identical) it did
   what it was built for: 7B unsupported declined 0 → 6 of 8, 3B 5 → 7.
   But it also blocked two answerable questions on both models, "Distinct
   stores per channel." and "Distinct store cities in each region.":
@@ -243,7 +243,7 @@ negative (both metrics renamed; values verified identical).
   a new fresh set.
 * **Gate fails open.** When the verifier's output cannot be parsed, the
   plan is executed (one unsupported question on fresh_v11, 7B v12).
-* **Verifier false blocks on correct plans** occurred on fresh_v11 for
+* **Verifier blocks answerable questions.** On fresh_v11 it blocked
   every answerable question the trigger fired on (1 under v11, 3 under
   v12, both models), so widening the trigger has a direct cost.
 * **Terse phrasing** lowered 7B answerable accuracy on fresh_v10 to 7/12
