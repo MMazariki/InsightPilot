@@ -113,6 +113,20 @@ DEFAULTS = {
         "autosend": False,
         "model": "base.en",
     },
+    # Documents page (answers from PDFs): docs/RAG_PLAN.md.
+    "documents": {
+        "folder": "documents",          # relative to the project, or absolute
+        "recursive": True,
+        "ollama_url": "http://localhost:11434",
+        "embedding_model": "nomic-embed-text",
+        "answer_model": "qwen2.5:7b-instruct",
+        "answer_timeout": 240,
+        "chunk_chars": 1000,
+        "overlap_chars": 150,
+        "top_k": 6,
+        "min_score": 0.3,
+        "show_excerpts": True,
+    },
 }
 
 # (minimum, maximum) for numeric settings; None in the data means "not set".
@@ -125,6 +139,11 @@ LIMITS = {
     "num_ctx": (1024, 1048576),
     "max_table_rows": (1, 5000),
     "chat_height": (300, 2000),
+    "answer_timeout": (10, 3600),
+    "chunk_chars": (300, 5000),
+    "overlap_chars": (0, 1000),
+    "top_k": (1, 20),
+    "min_score": (0.0, 1.0),
 }
 
 SECRET_NAMES = ("planner_api_key", "verifier_api_key")
@@ -285,11 +304,35 @@ def validate(raw):
     clean["voice"]["autosend"] = bool(voice.get("autosend", False))
     clean["voice"]["model"] = _text(voice.get("model", "base.en")) or "base.en"
 
+    docs = raw.get("documents") if isinstance(raw.get("documents"), dict) else {}
+    base = DEFAULTS["documents"]
+    for name in ("folder", "ollama_url", "embedding_model", "answer_model"):
+        clean["documents"][name] = _text(docs.get(name, base[name])) or base[name]
+    for name in ("recursive", "show_excerpts"):
+        clean["documents"][name] = bool(docs.get(name, base[name]))
+    labels = {"answer_timeout": ("Answer timeout", int),
+              "chunk_chars": ("Passage size", int),
+              "overlap_chars": ("Passage overlap", int),
+              "top_k": ("Passages per answer", int),
+              "min_score": ("Minimum relevance", float)}
+    for name, (label, kind) in labels.items():
+        value = _number(docs.get(name, base[name]), name, kind, False, errors,
+                        f"Documents: {label}")
+        clean["documents"][name] = base[name] if value is None else value
+    if clean["documents"]["overlap_chars"] >= clean["documents"]["chunk_chars"]:
+        errors.append("Documents: the overlap must be smaller than the passage size.")
+        clean["documents"]["overlap_chars"] = base["overlap_chars"]
+
     return clean, errors
 
 
 def is_default(settings):
-    return validate(settings)[0] == DEFAULTS
+    """True when the Power BI assistant runs as measured. The Documents
+    page settings are not part of that measurement."""
+
+    clean = validate(settings)[0]
+    return ({k: v for k, v in clean.items() if k != "documents"}
+            == {k: v for k, v in DEFAULTS.items() if k != "documents"})
 
 
 def effective_verifier(settings):

@@ -1,7 +1,13 @@
 # Plan: "Documents" page — answers from a folder of PDFs (RAG)
 
-Status: **plan only, not implemented** (2026-11-17). Written so that another
-session or model can implement it without this conversation.
+Status: **implemented 2026-11-17** (steps 1-7 and 9; the evaluation in §7
+needs the user's own PDFs). Decisions taken (§6): folder `documents` in the
+project, English (`nomic-embed-text`), answer model `qwen2.5:7b-instruct`,
+text PDFs only. Changes from the plan while building: a new page always
+starts a new passage, so every citation names one page; with
+`nomic-embed-text` unrelated questions still score about 0.5, so the
+minimum-relevance cut-off is a coarse filter and the answer model's
+"The documents do not answer this." reply is the main guard.
 
 ## 1. Goal
 

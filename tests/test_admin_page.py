@@ -243,7 +243,7 @@ def test_gear_button_opens_admin_and_back_returns(app):
     assert not app.exception
     assert app.session_state.view == "admin"
     assert [tab.label for tab in app.tabs] == [
-        "Models", "Answer checks", "Power BI", "Interface", "Voice", "About"]
+        "Models", "Answer checks", "Power BI", "Interface", "Voice", "Documents", "About"]
     assert app.button(key="adm_save").disabled  # nothing changed yet
     app.button(key="adm_back").click().run()
     assert app.session_state.view == "chat"

@@ -264,7 +264,7 @@ def render(agent_mode_in_use, voice_installed):
         st.success(notice, icon=":material/check_circle:")
 
     tabs = st.tabs(["Models", "Answer checks", "Power BI", "Interface",
-                    "Voice", "About"])
+                    "Voice", "Documents", "About"])
 
     # ---------------------------------------------------------- Models
     with tabs[0]:
@@ -472,8 +472,56 @@ def render(agent_mode_in_use, voice_installed):
             help="base.en (141 MB, about 1 second per question) or small.en "
                  "(488 MB, about 3 seconds). Needs a restart of InsightPilot.")
 
-    # ----------------------------------------------------------- About
+    # ------------------------------------------------------- Documents
+    d = saved["documents"]
     with tabs[5]:
+        st.caption("The Documents page answers questions from the PDFs in a "
+                   "folder, using local Ollama models. PDF text never leaves "
+                   "this computer.")
+        one, two = st.columns(2)
+        with one:
+            doc_folder = st.text_input(
+                "PDF folder", value=d["folder"], key=_key("doc_folder"),
+                help="An absolute path, or a folder inside the project. The "
+                     "default 'documents' is created in the project folder.")
+            doc_recursive = st.checkbox("Include subfolders", value=d["recursive"],
+                                        key=_key("doc_recursive"))
+            doc_embedding = st.text_input(
+                "Embedding model (Ollama)", value=d["embedding_model"],
+                key=_key("doc_embedding"),
+                help="Turns passages into vectors for search. Changing it needs "
+                     "Rebuild on the Documents page. English: nomic-embed-text; "
+                     "multilingual: bge-m3.")
+            doc_answer = st.text_input(
+                "Answer model (Ollama)", value=d["answer_model"],
+                key=_key("doc_answer"),
+                help="Writes the answer from the retrieved passages.")
+            doc_url = st.text_input("Ollama address", value=d["ollama_url"],
+                                    key=_key("doc_url"))
+        with two:
+            doc_top_k = st.number_input(
+                "Passages per answer", 1, 20, int(d["top_k"]), key=_key("doc_top_k"))
+            doc_min_score = st.number_input(
+                "Minimum relevance", 0.0, 1.0, float(d["min_score"]), step=0.05,
+                key=_key("doc_min_score"),
+                help="Below this, the page answers that the documents do not "
+                     "cover the question, without asking the model.")
+            doc_chunk = st.number_input(
+                "Passage size (characters)", 300, 5000, int(d["chunk_chars"]),
+                step=100, key=_key("doc_chunk"),
+                help="Changing it needs Rebuild on the Documents page.")
+            doc_overlap = st.number_input(
+                "Passage overlap (characters)", 0, 1000, int(d["overlap_chars"]),
+                step=50, key=_key("doc_overlap"))
+            doc_timeout = st.number_input(
+                "Answer timeout (seconds)", 10, 3600, int(d["answer_timeout"]),
+                key=_key("doc_timeout"))
+            doc_excerpts = st.checkbox(
+                "Show the passages used under each answer",
+                value=d["show_excerpts"], key=_key("doc_excerpts"))
+
+    # ----------------------------------------------------------- About
+    with tabs[6]:
         st.markdown(
             f"""
 * Settings file: `{app_settings.SETTINGS_FILE}`
@@ -519,6 +567,14 @@ def render(agent_mode_in_use, voice_installed):
             "create_charts": create_charts,
         },
         "voice": {"autosend": voice_autosend, "model": voice_model},
+        "documents": {
+            "folder": doc_folder, "recursive": doc_recursive,
+            "ollama_url": doc_url, "embedding_model": doc_embedding,
+            "answer_model": doc_answer, "answer_timeout": doc_timeout,
+            "chunk_chars": doc_chunk, "overlap_chars": doc_overlap,
+            "top_k": doc_top_k, "min_score": doc_min_score,
+            "show_excerpts": doc_excerpts,
+        },
     }
     clean, errors = app_settings.validate(edited)
     key_changes = bool(planner_key or planner_remove or verifier_key or verifier_remove)

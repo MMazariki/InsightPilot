@@ -55,6 +55,27 @@ buttons. All of this is switched off with Admin → Answer checks →
 "Understand everyday wording". It was added after the accuracy in
 `docs/EVALUATION.md` was measured and is not covered by it.
 
+## Asking your documents (PDFs)
+
+The **Documents** button next to "New chat" (or
+<http://localhost:8501/?view=documents>) opens a second chat that answers
+only from the PDF files in the project's `documents` folder (another folder
+can be set in Admin → Documents). Every answer names the file and page of
+its sources, shows the passages used, and offers the PDF to open. When the
+documents do not cover a question, it says so instead of guessing.
+
+* **Adding files:** copy PDFs into `documents` (subfolders included). New,
+  changed and deleted files are indexed when the page opens, or with
+  **Index now**. Only text PDFs are read; scanned PDFs are listed as "no
+  text layer".
+* **Local:** text extraction with `pypdf`, search with the Ollama model
+  `nomic-embed-text` (meaning) plus keyword matching, answers by
+  `qwen2.5:7b-instruct`. Nothing leaves this computer. The PDFs and the
+  index (`rag_index/`) are not committed to git.
+* **Search only in** limits a question to chosen files; short follow-up
+  questions ("and for returns?") use the previous question too.
+* Design and decisions: [`docs/RAG_PLAN.md`](docs/RAG_PLAN.md).
+
 ## Charts in the Power BI report
 
 When you are signed in to the report on the right, every answered question

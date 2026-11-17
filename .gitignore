@@ -60,3 +60,8 @@ config/
 
 # Voice model files (downloaded on first use)
 models/
+
+# Documents page: the PDFs and their index stay on this computer
+documents/*
+!documents/README.md
+rag_index/

@@ -264,8 +264,9 @@ VOICE_ENABLED = voice.is_available()
 def get_transcriber():
     return voice.Transcriber()
 if "view" not in st.session_state:
-    st.session_state.view = (
-        "admin" if st.query_params.get("view") == "admin" else "chat")
+    requested_view = st.query_params.get("view")
+    st.session_state.view = (requested_view if requested_view in ("admin", "documents")
+                             else "chat")
 
 # Rebuild the agent when the saved settings or API keys change.
 SETTINGS_STAMP = app_settings.stamp()
@@ -300,6 +301,10 @@ def change_chart_type():
 
 def open_admin():
     st.session_state.view = "admin"
+
+
+def open_documents():
+    st.session_state.view = "documents"
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -418,6 +423,17 @@ if st.session_state.view == "admin":
 
 
 # =====================================================
+# DOCUMENTS PAGE (answers from PDFs)
+# =====================================================
+
+if st.session_state.view == "documents":
+    from src import documents_page
+
+    documents_page.render(SETTINGS)
+    st.stop()
+
+
+# =====================================================
 # MAIN LAYOUT
 # =====================================================
 
@@ -433,13 +449,22 @@ chat_column, report_column = st.columns(
 
 with chat_column, st.container(border=True, key="chat_card"):
 
-    title_column, action_column, admin_column = st.columns(
-        [3, 1, 0.34], vertical_alignment="center")
+    title_column, docs_column, action_column, admin_column = st.columns(
+        [2.6, 1.1, 1, 0.34], vertical_alignment="center")
     with title_column:
         st.html(
             '<div class="ip-card-title">Ask InsightPilot</div>'
             '<div class="ip-card-sub">Questions about sales, profit, units, '
             "discounts and targets.</div>"
+        )
+    with docs_column:
+        st.button(
+            "Documents",
+            key="open_documents",
+            icon=":material/description:",
+            help="Ask questions answered from your PDF documents",
+            on_click=open_documents,
+            use_container_width=True,
         )
     with action_column:
         st.button(
