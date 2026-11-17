@@ -1,5 +1,13 @@
-"""One object the page uses: settings -> index, search and answers."""
+"""One object the page uses: settings -> index, search and answers.
 
+Segregation: documents are grouped by their top-level subfolder (for
+example ``documents/102/...``). A question is answered only from the
+folder it names; without a valid folder nothing is searched. PDFs placed
+directly in the documents folder belong to no folder and are never
+searched.
+"""
+
+import re
 from pathlib import Path
 
 from src.rag.answer import answer, ollama_chat
@@ -11,6 +19,33 @@ from src.rag.store import Store
 ROOT = Path(__file__).resolve().parents[2]
 INDEX_DIR = ROOT / "rag_index"
 DEFAULT_FOLDER = ROOT / "documents"
+
+
+FOLDER_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+NO_FOLDER = "Enter a folder number to search its documents."
+
+
+class FolderError(ValueError):
+    """The folder number is missing, malformed or has no documents."""
+
+
+def folder_of(key):
+    """``"102/sub/x.pdf"`` -> ``"102"``; a file in the root -> ``None``."""
+    return key.split("/", 1)[0] if "/" in key else None
+
+
+def clean_folder_id(value):
+    """The folder number as typed, checked: letters, digits, - and _ only
+    (no paths). Returns ``None`` when empty; raises ``FolderError`` when
+    malformed."""
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if not FOLDER_ID.fullmatch(text):
+        raise FolderError("A folder number may contain only letters, digits, "
+                          "'-' and '_'.")
+    return text
 
 
 def resolve_folder(setting):
@@ -53,8 +88,28 @@ class DocumentService:
         self._retriever = None
         return summary
 
-    def library(self):
-        return self.store.manifest.get("files", {})
+    def library(self, folder_id=None):
+        """Files of one folder (all files when ``folder_id`` is ``None``,
+        for indexing status only)."""
+        files = self.store.manifest.get("files", {})
+        if folder_id is None:
+            return files
+        return {k: v for k, v in files.items() if folder_of(k) == folder_id}
+
+    def folder_keys(self, folder_id):
+        """Indexed files of the folder; raises ``FolderError`` if none."""
+        folder_id = clean_folder_id(folder_id)
+        if folder_id is None:
+            raise FolderError(NO_FOLDER)
+        keys = [k for k, v in self.library(folder_id).items()
+                if v.get("status") == "indexed"]
+        if not keys:
+            raise FolderError(f"There are no indexed documents in folder {folder_id}.")
+        return keys
+
+    def unfoldered(self):
+        """PDFs directly in the documents folder: never searchable."""
+        return [k for k in self.library() if folder_of(k) is None]
 
     # ------------------------------------------------------------ asking
 
@@ -70,14 +125,25 @@ class DocumentService:
         return ollama_chat(messages, self.config["answer_model"],
                            self.config["ollama_url"], self.config["answer_timeout"])
 
-    def ask(self, question, history=(), files=None):
+    def ask(self, question, history=(), folder_id=None, files=None):
+        """Answer from the PDFs of ``folder_id`` only. ``files`` narrows the
+        search further but can never reach outside the folder. Raises
+        ``FolderError`` without a valid folder."""
+
+        allowed = self.folder_keys(folder_id)
+        if files:
+            allowed = [k for k in allowed if k in set(files)]
+            if not allowed:
+                raise FolderError("None of the chosen files are in this folder.")
         # Follow-up questions search with the previous question's words too.
         query = question
         previous = [t["content"] for t in history if t["role"] == "user"]
         if previous and len(question.split()) < 8:
             query = f"{previous[-1]} {question}"
         hits, best = self.retriever.search(
-            query, self.config["top_k"], self.config["min_score"], files)
+            query, self.config["top_k"], self.config["min_score"], allowed)
+        # Defence in depth: nothing from another folder reaches the model.
+        hits = [h for h in hits if h["file_key"] in set(allowed)]
         result = answer(question, hits, self.chat, history)
         result["best_score"] = round(best, 3)
         result["retrieved"] = len(hits)

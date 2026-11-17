@@ -13,7 +13,7 @@ import streamlit as st
 from src.rag.answer import AnswerError
 from src.rag.embed import EmbedError
 from src.rag.indexer import IndexBusy
-from src.rag.service import DocumentService
+from src.rag.service import DocumentService, FolderError, clean_folder_id
 
 STATUS_LABELS = {
     "indexed": "Indexed",
@@ -111,20 +111,39 @@ def render(settings):
     service = _service(config)
     folder = service.folder
     folder.mkdir(parents=True, exist_ok=True)
-    st.session_state.setdefault("doc_messages", [])
+    histories = st.session_state.setdefault("doc_histories", {})
+
+    # The folder number can come from the link: ?view=documents&folder=102
+    if "doc_folder_input" not in st.session_state:
+        st.session_state.doc_folder_input = st.query_params.get("folder", "")
 
     # ------------------------------------------------------------ header
-    title, new_chat, back = st.columns([4, 1, 1.3], vertical_alignment="center")
+    title, folder_box, new_chat, back = st.columns(
+        [3.2, 1.3, 1, 1.3], vertical_alignment="bottom")
     with title:
         st.html('<div class="ip-card-title" style="font-size:1.25rem">Ask your '
-                'documents</div><div class="ip-card-sub">Answers come only from '
-                'the PDFs in your documents folder, with the file and page of '
-                'every source.</div>')
+                'documents</div><div class="ip-card-sub">Each folder is separate: '
+                'answers come only from the PDFs of the folder number you enter, '
+                'with the file and page of every source.</div>')
+    with folder_box:
+        typed = st.text_input("Folder number", key="doc_folder_input",
+                              placeholder="e.g. 102",
+                              help="Required. Only the PDFs in documents\\<number> "
+                                   "are searched.")
+
+    folder_id, folder_error = None, None
+    try:
+        folder_id = clean_folder_id(typed)
+    except FolderError as exc:
+        folder_error = str(exc)
+    if folder_id and st.query_params.get("folder") != folder_id:
+        st.query_params["folder"] = folder_id
+    messages = histories.setdefault(folder_id or "", [])
+
     with new_chat:
         if st.button("New chat", key="doc_new_chat", icon=":material/add_comment:",
-                     disabled=not st.session_state.doc_messages,
-                     use_container_width=True):
-            st.session_state.doc_messages = []
+                     disabled=not messages, use_container_width=True):
+            histories[folder_id or ""] = []
             st.rerun()
     with back:
         if st.button("Back to Power BI", key="doc_back", icon=":material/arrow_back:",
@@ -149,27 +168,23 @@ def render(settings):
 
     # ----------------------------------------------------------- library
     with library_column, st.container(border=True, key="doc_library"):
-        st.html('<div class="ip-card-title">Library</div>')
-        st.caption(f"Folder: `{folder}`. Put PDF files here"
-                   + (" (subfolders included)." if config["recursive"] else "."))
+        st.html('<div class="ip-card-title">Library'
+                + (f" · folder {folder_id}" if folder_id else "") + '</div>')
+        st.caption(f"Documents folder: `{folder}`. Put each group of PDFs in its "
+                   "own subfolder, for example `documents\\102`.")
         notice = st.session_state.pop("doc_notice", None)
         if notice:
             st.success(notice, icon=":material/check_circle:")
 
+        # Indexing covers every folder; only counts are shown here.
         files, work = service.pending()
         changes = len(work["new"]) + len(work["changed"]) + len(work["deleted"])
-        stats = service.store.stats()
-        a, b, c = st.columns(3)
-        a.metric("PDFs", len(files))
-        b.metric("Pages", f"{stats['pages']:,}")
-        c.metric("Passages", f"{stats['chunks']:,}")
-
         progress_slot = st.empty()
         can_index = installed is not None and config["embedding_model"] not in missing
         if changes:
             st.caption(", ".join(f"{len(work[k])} {k}" for k in
                                  ("new", "changed", "deleted") if work[k])
-                       + " since the last indexing.")
+                       + " file(s) since the last indexing.")
         index_now = st.button("Index now" if changes else "Index is up to date",
                               key="doc_index", type="primary" if changes else "secondary",
                               disabled=not (changes and can_index),
@@ -180,26 +195,48 @@ def render(settings):
             st.session_state.doc_auto_done = True
             _run_index(service, False, progress_slot)
 
-        library = service.library()
-        if library:
-            rows = [{"File": key,
-                     "Status": STATUS_LABELS.get(entry.get("status"), entry.get("status")),
-                     "Pages": entry.get("pages", 0),
-                     "Passages": entry.get("chunks", 0)}
-                    for key, entry in sorted(library.items())]
-            st.dataframe(rows, hide_index=True, use_container_width=True,
-                         height=min(38 + 35 * len(rows), 320))
+        loose = service.unfoldered()
+        if loose:
+            st.warning(f"{len(loose)} PDF(s) are directly in the documents folder, "
+                       "not in a numbered subfolder, so they are never searched.",
+                       icon=":material/folder_off:")
+
+        folder_ready = False
+        if folder_error:
+            st.error(folder_error, icon=":material/error:")
+        elif not folder_id:
+            st.info("Enter a folder number above to see and search its documents.",
+                    icon=":material/folder:")
+        else:
+            library = service.library(folder_id)
             indexed = [k for k, e in sorted(library.items()) if e.get("status") == "indexed"]
-            if len(indexed) > 1:
-                st.multiselect("Search only in", indexed, key="doc_filter",
-                               placeholder="All documents")
-        elif not files:
-            st.info("The folder is empty. Copy PDF files into it; they are "
-                    "indexed when you open this page or click Index now.",
-                    icon=":material/folder_open:")
+            folder_ready = bool(indexed)
+            if not library:
+                st.info(f"There are no documents in folder {folder_id}.",
+                        icon=":material/folder_off:")
+            else:
+                pages = sum(e.get("pages", 0) for e in library.values()
+                            if e.get("status") == "indexed")
+                chunks = sum(e.get("chunks", 0) for e in library.values())
+                a, b, c = st.columns(3)
+                a.metric("PDFs", len(library))
+                b.metric("Pages", f"{pages:,}")
+                c.metric("Passages", f"{chunks:,}")
+                rows = [{"File": key.split("/", 1)[1],
+                         "Status": STATUS_LABELS.get(entry.get("status"), entry.get("status")),
+                         "Pages": entry.get("pages", 0),
+                         "Passages": entry.get("chunks", 0)}
+                        for key, entry in sorted(library.items())]
+                st.dataframe(rows, hide_index=True, use_container_width=True,
+                             height=min(38 + 35 * len(rows), 320))
+                if len(indexed) > 1:
+                    st.multiselect("Search only in", indexed, key=f"doc_filter_{folder_id}",
+                                   format_func=lambda k: k.split("/", 1)[1],
+                                   placeholder="All documents in this folder")
         with st.expander("Rebuild the whole index"):
-            st.caption("Reads every PDF again. Needed only after changing the "
-                       "embedding model or passage size in Admin settings.")
+            st.caption("Reads every PDF in every folder again. Needed only after "
+                       "changing the embedding model or passage size in Admin "
+                       "settings.")
             if st.button("Rebuild", key="doc_rebuild", disabled=not can_index):
                 _run_index(service, True, progress_slot)
 
@@ -208,44 +245,52 @@ def render(settings):
         history = st.container(height=settings["interface"]["chat_height"] - 60,
                                border=False, key="doc_chat_scroll")
         with history:
-            if not st.session_state.doc_messages:
-                st.html('<div class="ip-welcome"><h3>Ask about your documents</h3>'
-                        '<p>For example: <i>What does the policy say about '
-                        'refunds?</i> or <i>Summarise the main findings of the '
-                        'report.</i></p></div>')
-            for index, message in enumerate(st.session_state.doc_messages):
+            if not messages:
+                if folder_ready:
+                    st.html(f'<div class="ip-welcome"><h3>Ask about folder {folder_id}'
+                            '</h3><p>For example: <i>What does the policy say about '
+                            'refunds?</i> or <i>Summarise the main findings.</i></p></div>')
+                else:
+                    st.html('<div class="ip-welcome"><h3>Enter a folder number</h3>'
+                            '<p>Questions are answered only from the PDFs of the '
+                            'folder you enter (for example <b>102</b> for '
+                            '<code>documents\\102</code>).</p></div>')
+            for index, message in enumerate(messages):
                 if message["role"] == "user":
                     with st.chat_message("user", avatar=":material/person:"):
                         st.markdown(message["content"])
                 else:
                     with st.chat_message("assistant", avatar=":material/description:"):
-                        _render_answer(message, folder, config["show_excerpts"], index,
-                                       config["read_aloud"])
+                        _render_answer(message, folder, config["show_excerpts"],
+                                       f"{folder_id}-{index}", config["read_aloud"])
 
-        question = st.chat_input("Ask a question about your documents...",
-                                 key="doc_chat_input",
-                                 disabled=not service.store.chunks)
-        if not service.store.chunks:
-            st.caption("Questions open once at least one PDF is indexed.")
+        question = st.chat_input(
+            f"Ask a question about folder {folder_id}..." if folder_ready
+            else "Enter a folder number first", key="doc_chat_input",
+            disabled=not folder_ready)
 
-        if question:
-            st.session_state.doc_messages.append({"role": "user", "content": question})
+        if question and folder_ready:
+            messages.append({"role": "user", "content": question})
             with history:
                 with st.chat_message("user", avatar=":material/person:"):
                     st.markdown(question)
                 with st.chat_message("assistant", avatar=":material/description:"):
-                    with st.spinner("Searching the documents and writing the answer..."):
+                    with st.spinner(f"Searching folder {folder_id} and writing the answer..."):
                         turns = [{"role": m["role"], "content": m["content"]}
-                                 for m in st.session_state.doc_messages[:-1]]
+                                 for m in messages[:-1]]
                         try:
-                            result = service.ask(question, turns,
-                                                 st.session_state.get("doc_filter") or None)
+                            result = service.ask(
+                                question, turns, folder_id,
+                                st.session_state.get(f"doc_filter_{folder_id}") or None)
                             message = {"role": "assistant", "content": result["text"],
                                        "sources": result["sources"],
                                        "found": result["found"],
                                        "cited": result["cited"]}
+                        except FolderError as exc:
+                            message = {"role": "assistant", "content": str(exc),
+                                       "found": False}
                         except (AnswerError, EmbedError) as exc:
                             message = {"role": "assistant",
                                        "content": f"**Error:** {exc}", "found": True}
-            st.session_state.doc_messages.append(message)
+            messages.append(message)
             st.rerun()

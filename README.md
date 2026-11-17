@@ -64,7 +64,15 @@ can be set in Admin → Documents). Every answer names the file and page of
 its sources, shows the passages used, and offers the PDF to open. When the
 documents do not cover a question, it says so instead of guessing.
 
-* **Adding files:** copy PDFs into `documents` (subfolders included). New,
+* **Folders are separate.** Put each group of PDFs in its own numbered
+  subfolder (for example `documentsB`). A question is answered only from
+  the folder number entered in **Folder number** (or passed in the link:
+  <http://localhost:8501/?view=documents&folder=102>); without a valid number
+  nothing is searched. The library, sources and chat history show only that
+  folder. PDFs placed directly in `documents` are never searched. This
+  separates answers; it is not a login, so anyone using the app can type
+  any folder number.
+* **Adding files:** copy PDFs into a folder under `documents`. New,
   changed and deleted files are indexed when the page opens, or with
   **Index now**. Only text PDFs are read; scanned PDFs are listed as "no
   text layer".

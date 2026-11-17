@@ -231,7 +231,7 @@ def test_no_hits_answers_without_the_model():
 
 def test_service_end_to_end(tmp_path):
     docs = tmp_path / "docs"
-    _write(docs, "policy.pdf", POLICY)
+    _write(docs, "102/policy.pdf", POLICY)
     config = dict(app_settings.DEFAULTS["documents"], folder=str(docs), min_score=0.0)
     seen = []
 
@@ -242,14 +242,14 @@ def test_service_end_to_end(tmp_path):
     service = DocumentService(config, index_dir=tmp_path / "index",
                               embedder=FakeEmbedder(), chat=chat)
     files, work = service.pending()
-    assert work["new"] == ["policy.pdf"]
+    assert work["new"] == ["102/policy.pdf"]
     service.index()
-    result = service.ask("How long is the warranty?")
+    result = service.ask("How long is the warranty?", folder_id="102")
     assert result["found"] and result["sources"][0]["page_start"] == 2
     # A short follow-up searches with the previous question too.
     service.ask("and returns?", history=[
         {"role": "user", "content": "How long is the warranty?"},
-        {"role": "assistant", "content": "2 years [1]."}])
+        {"role": "assistant", "content": "2 years [1]."}], folder_id="102")
     assert len(seen) == 2
 
 
@@ -285,3 +285,63 @@ def test_read_aloud_setting_defaults_on():
     assert app_settings.DEFAULTS["documents"]["read_aloud"] is True
     clean, _ = app_settings.validate({"documents": {"read_aloud": False}})
     assert clean["documents"]["read_aloud"] is False
+
+
+# -------------------------------------------------------------- segregation
+
+def _segregated(tmp_path, chat=None):
+    from src.rag.service import DocumentService
+    docs = tmp_path / "docs"
+    _write(docs, "102/policy.pdf", POLICY)
+    _write(docs, "205/secret.pdf", [["Project Falcon budget is 4.2 million riyals."]])
+    _write(docs, "205/more/notes.pdf", [["Falcon launch is planned for March."]])
+    _write(docs, "loose.pdf", [["Falcon warranty is 9 years."]])
+    config = dict(app_settings.DEFAULTS["documents"], folder=str(docs), min_score=0.0)
+    seen = []
+
+    def default_chat(messages):
+        seen.append(messages[-1]["content"])
+        return "Answer [1]."
+
+    service = DocumentService(config, index_dir=tmp_path / "index",
+                              embedder=FakeEmbedder(), chat=chat or default_chat)
+    service.index()
+    return service, seen
+
+
+def test_answers_come_only_from_the_named_folder(tmp_path):
+    service, seen = _segregated(tmp_path)
+    result = service.ask("What is the Falcon budget?", folder_id="102")
+    assert all(s["file_key"].startswith("102/") for s in result["sources"])
+    assert "4.2 million" not in seen[-1]
+    result = service.ask("What is the Falcon budget?", folder_id="205")
+    assert result["sources"] and all(
+        s["file_key"].startswith("205/") for s in result["sources"])
+    assert "4.2 million" in seen[-1]
+    assert "9 years" not in seen[-1]  # the loose file is never used
+
+
+@pytest.mark.parametrize("folder_id", [None, "", "999", "../205", "205/more", "1 02"])
+def test_no_valid_folder_means_no_answer(tmp_path, folder_id):
+    from src.rag.service import FolderError
+
+    def chat(messages):
+        raise AssertionError("the model must not be called")
+
+    service, _ = _segregated(tmp_path, chat)
+    with pytest.raises(FolderError):
+        service.ask("What is the Falcon budget?", folder_id=folder_id)
+
+
+def test_file_filter_cannot_reach_another_folder(tmp_path):
+    from src.rag.service import FolderError
+    service, _ = _segregated(tmp_path)
+    with pytest.raises(FolderError):
+        service.ask("budget", folder_id="102", files=["205/secret.pdf"])
+
+
+def test_library_lists_one_folder(tmp_path):
+    service, _ = _segregated(tmp_path)
+    assert sorted(service.library("205")) == ["205/more/notes.pdf", "205/secret.pdf"]
+    assert service.unfoldered() == ["loose.pdf"]
+    assert service.folder_keys("102") == ["102/policy.pdf"]

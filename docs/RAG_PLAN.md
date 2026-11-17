@@ -9,6 +9,14 @@ starts a new passage, so every citation names one page; with
 minimum-relevance cut-off is a coarse filter and the answer model's
 "The documents do not answer this." reply is the main guard.
 
+**Folder segregation (added 2026-11-17 at the user's request):** documents
+are grouped by top-level subfolder of `documents` (e.g. `102`). Every
+question must name a folder (page field or `?folder=` in the link); search
+is restricted to that folder's files in `DocumentService.ask` (and the hits
+are filtered again before the model sees them), the library, sources and
+chat history are per folder, and PDFs directly in `documents` are never
+searched. Folder numbers are letters, digits, `-` and `_` only.
+
 ## 1. Goal
 
 A second page in InsightPilot where the user asks questions in plain
