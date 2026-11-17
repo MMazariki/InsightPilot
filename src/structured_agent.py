@@ -98,6 +98,37 @@ def format_result_table(columns: list[str], rows: list[dict],
     return table
 
 
+_CALENDAR = {
+    "MonthName": ["January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November",
+                  "December"],
+    "DayName": ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday",
+                "Thursday", "Friday"],
+}
+
+
+def _calendar_order(result, plan):
+    """Month and day names sort alphabetically in DAX; when the plan asks
+    for no order, show them in calendar order (other columns first)."""
+
+    if plan.get("order_by") or not result.get("rows"):
+        return result
+    columns = result["columns"]
+    named = [(c, _CALENDAR[_column_label(c)]) for c in columns
+             if _column_label(c) in _CALENDAR]
+    if not named:
+        return result
+    others = [c for c in columns if not c.startswith("[")
+              and _column_label(c) not in _CALENDAR]
+
+    def key(row):
+        return (tuple(str(row.get(c)) for c in others)
+                + tuple(order.index(row.get(c)) if row.get(c) in order else 99
+                        for c, order in named))
+
+    return {**result, "rows": sorted(result["rows"], key=key)}
+
+
 # Switches the Admin page can change. The defaults are pipeline v11 exactly
 # as measured in docs/EVALUATION.md.
 DEFAULT_OPTIONS = {
@@ -300,8 +331,19 @@ class StructuredPlanningAgent:
             from src.interpret import interpret
 
             planning_question, read_as = interpret(planning_question)
-            if read_as:
-                trace["interpreted"] = read_as
+        # Growth, share and holiday periods are computed around the plan
+        # (src/analysis.py), so their words are taken out before planning.
+        spec = None
+        if self.options["interpret_wording"] and not (
+                self.options["request_guard"] and screen_request(question)):
+            from src.analysis import detect
+
+            planning_question, spec, analysis_notes = detect(planning_question)
+            read_as = read_as + analysis_notes
+            if spec:
+                trace["analysis"] = sorted(spec)
+        if read_as:
+            trace["interpreted"] = read_as
         read_note = ("_Read " + "; ".join(read_as) + "._\n\n") if read_as else ""
 
         try:
@@ -347,6 +389,23 @@ class StructuredPlanningAgent:
                     trace["stages"].append("plan_adjusted")
                 except ValueError:
                     plan_notes = []  # keep the checked plan unchanged
+        if spec:
+            from evaluation.query_plan_validator import validate_query_plan
+            from src.analysis import adjust_plan
+
+            adjusted, _ = adjust_plan(plan, spec)
+            try:
+                validate_query_plan(adjusted)
+            except ValueError as exc:
+                trace["stages"].append("analysis_invalid")
+                return (
+                    f"{read_note}I understood the question but could not build "
+                    f"the comparison from the planned query ({exc}). Try "
+                    "naming the measure and the breakdown, for example "
+                    "*net sales by store, growth from 2021 to 2026*.\n\n"
+                    f"_No query was executed. Trace: `{trace['trace_id']}`_")
+            plan = adjusted
+            trace["stages"].append("analysis_plan")
         dax = compile_query_plan(plan)
         trace["stages"].append("compiled")
         if response.get("normalizations"):
@@ -372,6 +431,17 @@ class StructuredPlanningAgent:
         LOGGER.info("[%s] executed, %d rows", trace["trace_id"],
                     result["row_count"])
 
+        table_result = _calendar_order(result, plan)
+        if spec and result["row_count"] > 0:
+            from src.analysis import finish
+
+            table_result, analysis_notes = finish(result, plan, spec)
+            plan_notes = plan_notes + analysis_notes
+            trace["stages"].append("analysis")
+            if spec.get("share") and not preferred_chart:
+                preferred_chart = ("hundredPercentStackedColumnChart"
+                                   if len(plan["group_by"]) >= 2 else "pieChart")
+
         chart_note = None
         if self.options["create_visuals"] and result["row_count"] > 0:
             from src.visual_builder import build_visual_request
@@ -379,6 +449,9 @@ class StructuredPlanningAgent:
             request, notes = build_visual_request(
                 plan, planning_question, preferred_type=preferred_chart,
                 row_count=result["row_count"])
+            if request is not None and spec and spec.get("share") \
+                    and request["visualType"] == "clusteredColumnChart":
+                request["visualType"] = "hundredPercentStackedColumnChart"
             if request is not None:
                 self.pending_visual_request = request
                 trace["stages"].append("chart")
@@ -395,7 +468,7 @@ class StructuredPlanningAgent:
         for note in plan_notes:
             read_note += f"_Note: {note}._\n\n"
         return read_note + "\n\n".join([
-            format_result_table(result["columns"], result["rows"],
+            format_result_table(table_result["columns"], table_result["rows"],
                                 self.options["max_table_rows"])
             + (f"\n\n{chart_note}" if chart_note else ""),
             "**Query plan and DAX**\n\n"

@@ -35,7 +35,20 @@ terms, and the answer starts with a line saying how it was read:
 | this / last year, month, quarter; today; yesterday | the actual dates, from today's date |
 | typos ("regoin", "reveneu") | the closest model word |
 
-"Compare 2025 and 2026" is answered as a breakdown by year. When a question
+"Compare 2025 and 2026" is answered as a breakdown by year. Three kinds of
+question are worked out around the query (`src/analysis.py`):
+
+* **growth**: "Which store grew the most between 2021 and 2026?", "How did
+  units sold change between 2023 and 2026 by category?", "Net sales growth
+  year over year" give each value, the change and the change %, ranked by
+  change %;
+* **share**: "Delivery share of net sales by year", "Share of net sales by
+  channel", "Cash share of orders by region" give each part's % of its
+  total (a 100% stacked or pie chart in the report);
+* **holiday periods**: Ramadan, Eid (al-Fitr), National Day and White
+  Friday, with a year or else the latest one, become exact date ranges.
+
+Month and day names are listed in calendar order. When a question
 still cannot be answered (it names no measure, or a measure the model does
 not have, such as net profit), the answer suggests rephrased questions as
 buttons. All of this is switched off with Admin → Answer checks →

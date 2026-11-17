@@ -220,9 +220,14 @@ def _filters(plan, targets_by_alias, category, notes):
                 "values": [item["value"]],
             })
         elif operator in ADVANCED_OPERATORS:
+            value = item["value"]
+            # Report filters on date columns take a date-time value.
+            if item.get("column") in ("Date", "YearMonth") and isinstance(value, str) \
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                value += "T00:00:00"
             filters.append({
                 "kind": "advanced", "target": target,
-                "operator": ADVANCED_OPERATORS[operator], "value": item["value"],
+                "operator": ADVANCED_OPERATORS[operator], "value": value,
             })
         else:  # eq / ne on a metric
             filters.append({
