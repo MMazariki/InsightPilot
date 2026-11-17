@@ -1,8 +1,9 @@
 # InsightPilot status snapshot, 2026-11-17 (evening)
 
-Git tag: `snapshot-2026-11-17b`. All 758 offline tests pass
+Git tag: `snapshot-2026-11-17c`. All 769 offline tests pass
 (`.venv\Scripts\python.exe -m pytest tests -q`). The app is running.
-The earlier tag `snapshot-2026-11-17` marks the morning state.
+Earlier tags: `snapshot-2026-11-17` (morning) and `snapshot-2026-11-17b`
+(evening, before the weak-spot fixes in item 3).
 
 ## What exists and works
 
@@ -33,7 +34,7 @@ The earlier tag `snapshot-2026-11-17` marks the morning state.
    17.58 SAR) and is kept out of the app. Fix in Power BI:
    `Unit Price = AVERAGE(FactSales[UnitPriceSAR])`, then run
    `scripts\sync_model_schema.py --write`.
-3. **Weak questions fixed (2026-11-17, after the snapshot tag):** ratios
+3. **Weak questions fixed (2026-11-17):** ratios
    ("units per order", "average order value") divide by orders (AOV was
    computed as net sales / units); `FactSales[Total Orders]` is kept out of
    the app by `scripts/sync_model_schema.py`; "by month" without a year
