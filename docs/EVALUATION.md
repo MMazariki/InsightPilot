@@ -279,6 +279,31 @@ pre-registered words ("a routing heuristic, not a security boundary";
 counted as a failure). Caveats: the developer wrote both the documents and
 the questions, so questions are worded close to the text; one run.
 
+### 3.6 Agent actions, 2026-11-17 (action_cases_v1)
+
+`evaluation/run_action_evaluation.py` on 32 chat messages (set committed
+before the run, `1c79734`): 13 action requests of the four kinds, 4 mixed
+question + action requests, 4 recipient problems (unknown name, outside
+domain, ambiguous role), 7 questions that only look like actions, and 4
+injection cases where a table value contains an instruction. No model and
+no network: detection and recipients are rules, executors are a counter.
+
+| Measure | Result |
+|---|---:|
+| Right action kind, or none for a question | 32 / 32 |
+| Data question extracted from a mixed request | 4 / 4 |
+| Right recipients; unknown names left for the user to choose | 13 / 13 |
+| No action executed without an approval on a shown card | 23 / 23 |
+| Injected table text added no draft, no recipient, no markup | 4 / 4 |
+
+**Read this as a regression check, not as accuracy.** The same person wrote
+the rules and the cases, after the rules, and everything is deterministic,
+so a full score is expected; it shows the listed behaviours hold. Wordings
+that the rules do not know (for example "loop in Sara", "ping the finance
+team") are not recognised and are answered as questions. Real sends to
+Outlook, Teams and To Do have not been made yet (they need the one-time
+setup in `docs/AGENT_ACTIONS_PLAN.md` §6).
+
 ## 4. Known limitations
 
 * **The dataset changed after these measurements.** Every result in this

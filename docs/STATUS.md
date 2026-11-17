@@ -22,6 +22,7 @@ its settings moved to Admin).
 | Documents page (RAG) | `?view=documents` or the Documents button. Answers only from the PDFs of the folder number entered (`documents\<number>`, or `?folder=` in the link); nothing without one. pypdf, `nomic-embed-text` + keyword search fused, `qwen2.5:7b-instruct`; every answer cites file and page; incremental indexing; per-folder library and history; Read aloud (browser speech, local voices); every parameter (models, answer instructions, search, follow-ups, indexing, page) set in Admin → Documents, with an automatic rebuild when an index-shaping setting changes | Unit tests incl. cross-folder isolation; live on the user's PDF in folder 102 and on the project guide as a PDF. Accuracy not measured. Read aloud not heard by the developer (needs a real click). |
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | User's own recordings transcribed |
 | Data | 1 Jan 2021 to 16 Nov 2026, 122,483 sales lines: 2021-2024 and 2026 generated, 2025 as delivered. Targets rescaled to actual sales + 5-15% | Published dataset matches the CSVs year by year (lines, net sales, orders, targets) |
+| Agent actions (`src/actions/`, `src/action_card.py`) | "Email this to Sara", "post this to Teams", "create a task for every store below 85%", "save this as Excel", also combined with a question. Drafted on an editable card; runs only on Approve, once; 15-minute expiry; address book and allowed domains only; content built by the app; daily caps; audit log; Admin → Actions (off by default) | 59 unit and page tests (fakes for Graph and Teams); pre-registered rules check 32 / 32 (`docs/EVALUATION.md` §3.6). **No real email, Teams post or To Do task sent yet**: needs the Graph permissions and a Teams webhook. The card was not looked at in a browser. |
 | Model | Measures synced by `scripts/sync_model_schema.py`: Cost, Quantity, Orders added; `TotalQuantity` column. Sales Target follows date and category (TREATAS); Variance = target - net sales; achievement about 91% (2026: 79%, November and December are full-month targets) | Live DAX checks against the CSVs |
 
 ## Open items
@@ -64,6 +65,11 @@ its settings moved to Admin).
     login (anyone using the app can type any folder number). Answer quality
     depends on the 7B model (it once listed a diploma as a certification).
     No measured question set exists yet for documents.
+11. **Agent actions need one-time setup** before email, Teams and To Do
+    work: Graph `Mail.Send` and `Tasks.ReadWrite` (delegated, admin
+    consent) on the app registration; a Teams Workflows webhook; address
+    book and allowed domains in Admin → Actions; then enable. Detection is
+    rules only: unknown wordings ("loop in Sara") are treated as questions.
 
 ## Where things are
 
@@ -79,5 +85,7 @@ its settings moved to Admin).
   (both gitignored); design in `docs/RAG_PLAN.md`
 * LinkedIn post and screenshots: `docs/linkedin/`
 * Power BI file: `L:\Others\AgenticProject.pbix`
-* Settings and encrypted API keys: `config\` (not committed)
+* Settings and encrypted API keys (and the Teams webhook): `config\` (not committed)
+* Actions: design `docs/AGENT_ACTIONS_PLAN.md`; exports in `exports\`, audit
+  log `logs\actions.jsonl` (both gitignored)
 * Logs: `logs\`

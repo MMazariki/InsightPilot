@@ -142,6 +142,36 @@ differences and add `--write` to make them available to questions (then
 restart the app). Check what a new measure computes first; `--skip "Name"`
 keeps one out.
 
+## Acting on an answer (email, Teams, To Do, export)
+
+After a data answer, ask in the chat:
+
+* "Email this to Sara", "send it to me", "share the table with the CFO"
+* "Post this to the Teams channel"
+* "Create a task for every store below 85%", "remind me to review this by Friday"
+* "Save this as Excel", "export the answer to CSV"
+* or both at once: "Email net sales by region in 2025 to Layla" (answered
+  first, then drafted)
+
+The assistant drafts the action on a card: recipients, subject, your note,
+the attachment, the task list, with a preview of exactly what will be sent.
+Fields can be edited. **Nothing happens until you click Approve**, and each
+draft runs once. A draft expires after 15 minutes or when you ask a new
+question. Recipients come only from the address book, the allowed email
+domains, or yourself. The message is built by the app from the checked
+answer, never written by the model, and text inside the data can never
+start an action. Every draft, approval and result is listed in
+Admin → Actions → History (`logs/actions.jsonl`).
+
+Actions are **off by default**. To turn them on: Admin → Actions → Enable,
+fill the address book and allowed domains. Export works straight away
+(files go to `exports\`). Teams needs a Workflows webhook address for the
+channel (Teams: channel ⋯ → Workflows → *Post to a channel when a webhook
+request is received*). Email and To Do need two Microsoft Graph permissions
+on the app registration, `Mail.Send` and `Tasks.ReadWrite` (delegated, with
+admin consent); the first use opens one Microsoft sign-in window. Design and
+rules: `docs/AGENT_ACTIONS_PLAN.md`.
+
 ## Evaluation dashboard
 
 The chart button next to the gear (or <http://localhost:8501/?view=evaluation>)

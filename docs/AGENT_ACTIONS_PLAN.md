@@ -1,7 +1,28 @@
 # Plan: agent actions with approval
 
-Status: **plan only, not implemented** (2026-11-17). Written so that another
-session or model can implement it without this conversation.
+Status: **implemented (v1, all four kinds), 2026-11-17**, commit `1c79734`.
+Export is tested end to end; the Teams, email and To Do executors are
+tested against fakes only until the one-time setup (§6) is done. Results:
+`docs/EVALUATION.md` §3.6.
+
+Differences from the plan below, decided while building:
+
+* **No model in drafting.** Kind, recipients, note, due date and the "for
+  every row below N%" condition are read by rules (`src/actions/detect.py`).
+  The rules were accurate on the test messages, and leaving the model out
+  removes a way for it to invent recipients. Wordings the rules do not
+  know are answered as questions.
+* The address book is stored in the settings (Admin → Actions table), not a
+  separate `address_book.json`; the executors are one module
+  (`src/actions/executors.py`); the history is a section of Admin →
+  Actions, not a separate page.
+* Email attachments are limited to 3 MB (Graph `sendMail` accepts about
+  4 MB per request), not 5 MB.
+* No chart image is attached (vl-convert was not installed); the table is.
+* Approval also requires that the card was drawn (`shown`), so an action
+  cannot run in the run that created it.
+
+The original plan follows.
 
 ## 1. Goal
 
