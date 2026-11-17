@@ -83,6 +83,7 @@ DEFAULTS = {
         "strict_metric_words": False,
         "verifier_fail_closed": False,
         "measure_name_check": True,
+        "interpret_wording": True,
         "max_table_rows": 50,
     },
     "powerbi": {
@@ -248,7 +249,8 @@ def validate(raw):
     pipeline = raw.get("pipeline") if isinstance(raw.get("pipeline"), dict) else {}
     for name in ("request_guard", "repair_turn", "answerability_check",
                  "no_metric_trigger", "strict_metric_words",
-                 "verifier_fail_closed", "measure_name_check"):
+                 "verifier_fail_closed", "measure_name_check",
+                 "interpret_wording"):
         clean["pipeline"][name] = bool(
             pipeline.get(name, DEFAULTS["pipeline"][name]))
     rows = _number(pipeline.get("max_table_rows", 50), "max_table_rows", int,

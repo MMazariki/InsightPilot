@@ -143,7 +143,7 @@ def test_result_table_formatting_and_truncation():
     assert table.splitlines()[0] == "| B | A |"
     assert "x\\|y" in table
     assert "Showing the first 50 of 60 rows" in table
-    assert format_result_table([], []) == "_The query returned no rows._"
+    assert format_result_table([], []).startswith("_No data matches")
 
 
 @pytest.mark.parametrize("mode, expected", [

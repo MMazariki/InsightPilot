@@ -18,6 +18,30 @@ background while you are signed in to Windows.
 The app address is <http://localhost:8501>. It is reachable from this
 computer only.
 
+## Asking in your own words
+
+Before a question is planned, everyday wording is read into the model's
+terms, and the answer starts with a line saying how it was read:
+
+| You say | Read as |
+|---|---|
+| revenue, turnover, income, earnings, money, sales | net sales |
+| branch, shop, outlet, location | store |
+| pieces, quantity, volume | units sold |
+| profitability, profit margin | gross margin % |
+| performance, "how did we do", "perform best" | net sales (highest / lowest) |
+| period, over time | year and month |
+| day of week, weekday | day name |
+| this / last year, month, quarter; today; yesterday | the actual dates, from today's date |
+| typos ("regoin", "reveneu") | the closest model word |
+
+"Compare 2025 and 2026" is answered as a breakdown by year. When a question
+still cannot be answered (it names no measure, or a measure the model does
+not have, such as net profit), the answer suggests rephrased questions as
+buttons. All of this is switched off with Admin → Answer checks →
+"Understand everyday wording". It was added after the accuracy in
+`docs/EVALUATION.md` was measured and is not covered by it.
+
 ## Charts in the Power BI report
 
 When you are signed in to the report on the right, every answered question

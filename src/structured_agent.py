@@ -20,6 +20,7 @@ credentials or result rows.
 import json
 import logging
 import os
+import re
 import uuid
 from typing import Any, Callable
 
@@ -46,9 +47,23 @@ DEFAULT_MODEL = "qwen2.5-coder:7b"
 MAX_TABLE_ROWS = 50
 
 
-def _format_value(value: Any) -> str:
+# Whole-number columns that are labels, not amounts: no thousands separator.
+PLAIN_NUMBER_COLUMNS = {"Year", "MonthNumber", "WeekNumber", "Day"}
+_MIDNIGHT = re.compile(r"^(\d{4}-\d{2}-\d{2})T00:00:00(?:\.0+)?Z?$")
+
+
+def _format_value(value: Any, column: str | None = None) -> str:
     if value is None:
         return ""
+    label = _column_label(column) if column else ""
+    if label in PLAIN_NUMBER_COLUMNS and isinstance(value, (int, float)) \
+            and float(value).is_integer():
+        return str(int(value))
+    if isinstance(value, str):
+        midnight = _MIDNIGHT.match(value)
+        if midnight:
+            day = midnight.group(1)
+            return day[:7] if label == "YearMonth" else day
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
     if isinstance(value, float):
@@ -68,12 +83,13 @@ def _column_label(name: str) -> str:
 def format_result_table(columns: list[str], rows: list[dict],
                         max_rows: int = MAX_TABLE_ROWS) -> str:
     if not rows:
-        return "_The query returned no rows._"
+        return ("_No data matches this question (for example, a date after "
+                "the last day in the data)._")
 
     header = "| " + " | ".join(_column_label(c) for c in columns) + " |"
     divider = "| " + " | ".join("---" for _ in columns) + " |"
     body = [
-        "| " + " | ".join(_format_value(row.get(c)) for c in columns) + " |"
+        "| " + " | ".join(_format_value(row.get(c), c) for c in columns) + " |"
         for row in rows[:max_rows]
     ]
     table = "\n".join([header, divider, *body])
@@ -94,6 +110,10 @@ DEFAULT_OPTIONS = {
     # Added after v11 was measured (2026-11-17): decline "net profit"-style
     # phrases that name no measure instead of substituting another measure.
     "measure_name_check": True,
+    # Read everyday wording, relative dates and typos into model terms
+    # before planning (src/interpret.py), merge "compare A and B" filters
+    # into a breakdown, and offer a rephrased question when declining.
+    "interpret_wording": True,
     "max_table_rows": MAX_TABLE_ROWS,
     # Add a chart of the answer to the embedded report (off unless the app
     # asks for it; the query path is identical either way).
@@ -131,6 +151,9 @@ class StructuredPlanningAgent:
         # Set after a successful answer when options["create_visuals"] is on
         # and a chart fits the plan (src/visual_builder.py).
         self.pending_visual_request: dict[str, Any] | None = None
+        # Questions offered after a decline ("Did you mean ...").
+        self.suggestions: list[str] = []
+        self._vocabulary = None
         self.last_trace: dict[str, Any] | None = None
 
     # -------------------------------------------------------------
@@ -156,8 +179,15 @@ class StructuredPlanningAgent:
             missing = unmatched_measure_phrases(question)
             if missing:
                 trace["stages"].append("measure_name:missing")
+                suggestions = []
+                for phrase, closest in missing:
+                    for name in closest[:3]:
+                        suggestions.append(re.sub(
+                            re.escape(phrase), name.lower(), question,
+                            count=1, flags=re.I))
                 return {"kind": "clarification", "reason": "undefined_metric",
-                        "message": unmatched_measure_message(missing)}
+                        "message": unmatched_measure_message(missing),
+                        "suggestions": suggestions}
 
         raw = self.generate(self.model, question, self.instructions)
         trace["stages"].append("planner")
@@ -184,7 +214,7 @@ class StructuredPlanningAgent:
         if response["kind"] == "plan" and self.options["answerability_check"]:
             result = gate(
                 question, response["plan"], self.verifier_chat,
-                self.verifier_model,
+                self.verifier_model, vocabulary=self._gate_vocabulary(),
                 require_metric_reference=self.options["no_metric_trigger"],
                 strict_metric_words=self.options["strict_metric_words"])
             unusable = bool((result["verdict"] or {}).get("verifier_error"))
@@ -206,8 +236,41 @@ class StructuredPlanningAgent:
                 }
             if not result["passed"]:
                 return {"kind": "clarification", "reason": "undefined_metric",
-                        "message": clarification_message(result)}
+                        "message": clarification_message(result),
+                        "plan": response["plan"],
+                        "no_metric": bool(result.get("no_metric_reference"))}
         return response
+
+    def _gate_vocabulary(self):
+        """Model words, plus neutral verbs when wording is interpreted."""
+
+        if not self.options["interpret_wording"]:
+            return None
+        if self._vocabulary is None:
+            from evaluation.answerability import build_vocabulary
+            from src.interpret import NEUTRAL_WORDS
+
+            self._vocabulary = build_vocabulary() | NEUTRAL_WORDS
+        return self._vocabulary
+
+    def _suggest(self, response, question=None):
+        """Questions to offer with a decline."""
+
+        if response.get("suggestions"):
+            return response["suggestions"]
+        if not self.options["interpret_wording"]:
+            return []
+        if response.get("no_metric") and question:
+            # The question names no measure: offer the common ones.
+            base = question.strip().rstrip("?.!")
+            return [f"{base}: {name}" for name in ("net sales", "gross profit",
+                                                   "units sold")]
+        if response.get("plan"):
+            from src.interpret import plan_to_question
+
+            text = plan_to_question(response["plan"])
+            return [text] if text else []
+        return []
 
     # -------------------------------------------------------------
     # Public interface (matches PowerBIAgent)
@@ -215,6 +278,7 @@ class StructuredPlanningAgent:
 
     def ask(self, question: str) -> str:
         self.pending_visual_request = None
+        self.suggestions = []
         trace = {"trace_id": uuid.uuid4().hex[:12], "stages": [],
                  "pipeline": PIPELINE_VERSION, "model": self.model}
         self.last_trace = trace
@@ -230,6 +294,15 @@ class StructuredPlanningAgent:
             preferred_chart, planning_question = chart_preference(question)
             if preferred_chart:
                 trace["chart_requested"] = preferred_chart
+
+        read_as = []
+        if self.options["interpret_wording"]:
+            from src.interpret import interpret
+
+            planning_question, read_as = interpret(planning_question)
+            if read_as:
+                trace["interpreted"] = read_as
+        read_note = ("_Read " + "; ".join(read_as) + "._\n\n") if read_as else ""
 
         try:
             response = self.plan(planning_question, trace)
@@ -249,12 +322,31 @@ class StructuredPlanningAgent:
             trace["stages"].append(f"clarification:{response['reason']}")
             LOGGER.info("[%s] clarification (%s)", trace["trace_id"],
                         response["reason"])
+            self.suggestions = [s for s in self._suggest(response, planning_question)
+                                if s.strip().lower() != question.strip().lower()]
+            offer = ""
+            if self.suggestions:
+                offer = ("Did you mean: " + " or ".join(
+                    f"**{s}**" for s in self.suggestions) + "?\n\n")
             return (
-                f"{response['message']}\n\n"
+                f"{read_note}{response['message']}\n\n{offer}"
                 f"_No query was executed. Trace: `{trace['trace_id']}`_"
             )
 
         plan = response["plan"]
+        plan_notes = []
+        if self.options["interpret_wording"]:
+            from evaluation.query_plan_validator import validate_query_plan
+            from src.interpret import normalize_plan
+
+            fixed, plan_notes = normalize_plan(plan)
+            if fixed != plan:
+                try:
+                    validate_query_plan(fixed)
+                    plan = fixed
+                    trace["stages"].append("plan_adjusted")
+                except ValueError:
+                    plan_notes = []  # keep the checked plan unchanged
         dax = compile_query_plan(plan)
         trace["stages"].append("compiled")
         if response.get("normalizations"):
@@ -272,6 +364,10 @@ class StructuredPlanningAgent:
             )
 
         trace["stages"].append("executed")
+        # A total over no data comes back as one row of blanks.
+        if result["rows"] and all(
+                value is None for row in result["rows"] for value in row.values()):
+            result = dict(result, rows=[], row_count=0)
         trace["row_count"] = result["row_count"]
         LOGGER.info("[%s] executed, %d rows", trace["trace_id"],
                     result["row_count"])
@@ -296,7 +392,9 @@ class StructuredPlanningAgent:
                 chart_note = f"_No chart was added: {'; '.join(notes)}._"
             trace["chart"] = "created" if request is not None else notes
 
-        return "\n\n".join([
+        for note in plan_notes:
+            read_note += f"_Note: {note}._\n\n"
+        return read_note + "\n\n".join([
             format_result_table(result["columns"], result["rows"],
                                 self.options["max_table_rows"])
             + (f"\n\n{chart_note}" if chart_note else ""),

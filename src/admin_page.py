@@ -369,6 +369,15 @@ def render(agent_mode_in_use, voice_installed):
                  "declined with the closest measures, instead of being "
                  "answered with a different measure. Added after the "
                  "measured pipeline v11; not part of its accuracy figures.")
+        interpret_wording = st.checkbox(
+            "Understand everyday wording, relative dates and typos",
+            value=p["interpret_wording"], key=_key("interpret_wording"),
+            help='"branch" is read as store, "revenue" as net sales, "this '
+                 'year" as the current year, "regoin" as region, and so on; '
+                 "the answer says how the question was read. A declined "
+                 "question comes with a suggested rephrasing. Added after "
+                 "the measured pipeline v11; not part of its accuracy "
+                 "figures.")
         max_rows = st.number_input(
             "Rows shown per answer", min_value=1, max_value=5000,
             value=int(p["max_table_rows"]), step=10, key=_key("max_table_rows"))
@@ -492,6 +501,7 @@ def render(agent_mode_in_use, voice_installed):
             "strict_metric_words": strict_words,
             "verifier_fail_closed": fail_closed,
             "measure_name_check": measure_names,
+            "interpret_wording": interpret_wording,
             "max_table_rows": max_rows,
         },
         "powerbi": {

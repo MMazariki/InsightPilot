@@ -1,7 +1,8 @@
 import math
+import re
 import textwrap
 
-from evaluation.query_plan_validator import validate_query_plan
+from evaluation.query_plan_validator import load_model, validate_query_plan
 
 
 OPERATORS = {
@@ -31,6 +32,35 @@ def dax_literal(value):
         return str(value)
 
     raise ValueError(f"Unsupported literal type: {type(value).__name__}")
+
+
+_DATE_TEXT = re.compile(r"^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?(?:[T ]00:00(?::00)?)?$")
+_DATE_COLUMNS = None
+
+
+def _date_columns():
+    global _DATE_COLUMNS
+    if _DATE_COLUMNS is None:
+        _DATE_COLUMNS = {
+            (table["Name"], column["Name"])
+            for table in load_model()["Tables"]
+            for column in table.get("Columns", [])
+            if column.get("Type") == "DateTime"
+        }
+    return _DATE_COLUMNS
+
+
+def column_literal(table, column, value):
+    """Like ``dax_literal``, but a date written as text ("2026-11-16",
+    "2026-10") becomes ``DATE(...)`` when the column holds dates: DAX cannot
+    compare a date column with text."""
+
+    if isinstance(value, str) and (table, column) in _date_columns():
+        match = _DATE_TEXT.match(value.strip())
+        if match:
+            year, month, day = match.group(1), match.group(2), match.group(3) or 1
+            return f"DATE({int(year)}, {int(month)}, {int(day)})"
+    return dax_literal(value)
 
 
 def compile_expression(expression):
@@ -113,7 +143,8 @@ def compile_query_plan(plan):
                 + " "
                 + OPERATORS[condition["operator"]]
                 + " "
-                + dax_literal(condition["value"])
+                + column_literal(condition["table"], condition["column"],
+                                 condition["value"])
             )
 
         table_expression = (

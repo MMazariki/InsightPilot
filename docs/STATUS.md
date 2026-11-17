@@ -45,7 +45,15 @@ Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change
    different one. Before this, "Net profit over years" returned Net Sales
    labelled "Net Profit". The check was added after v11 was measured and is
    an Admin switch (Answer checks), on by default.
-8. **Voice.** English only. If words are misheard, switch the speech model to
+8. **Everyday wording** (`src/interpret.py`, added 2026-11-17): synonyms,
+   relative dates, typos, "compare A and B" as a breakdown, date filters
+   compiled as DAX dates, and suggested rephrasings on a decline. On a
+   probe of 24 loosely worded questions written by the developer, 21 were
+   answered and 3 declined with suggestions, against 4 declined and at
+   least 4 silently wrong before ("this year" read as 2023, "last month"
+   as April 2023, "compare 2025 and 2026" returning nothing). This is a
+   spot check, not a measured evaluation.
+9. **Voice.** English only. If words are misheard, switch the speech model to
    `small.en` in Admin settings and restart.
 
 ## Where things are

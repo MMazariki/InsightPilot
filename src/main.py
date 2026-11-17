@@ -542,7 +542,8 @@ with chat_column, st.container(border=True, key="chat_card"):
                         use_container_width=True,
                     )
 
-        for message in st.session_state.messages:
+        last_index = len(st.session_state.messages) - 1
+        for index, message in enumerate(st.session_state.messages):
 
             if message["role"] == "user":
                 with st.chat_message("user", avatar=":material/person:"):
@@ -550,6 +551,17 @@ with chat_column, st.container(border=True, key="chat_card"):
             else:
                 with st.chat_message("assistant", avatar=":material/explore:"):
                     render_answer(message["content"])
+                    # Suggested rephrasings of a declined question, as
+                    # buttons on the latest answer only.
+                    if index == last_index and message.get("suggestions"):
+                        for number, suggestion in enumerate(message["suggestions"]):
+                            st.button(
+                                suggestion,
+                                key=f"suggestion_{index}_{number}",
+                                icon=":material/subdirectory_arrow_right:",
+                                on_click=queue_prompt,
+                                args=(suggestion,),
+                            )
 
     if prompt:
 
@@ -585,6 +597,8 @@ with chat_column, st.container(border=True, key="chat_card"):
                         st.session_state.messages.append({
                             "role": "assistant",
                             "content": answer,
+                            "suggestions": list(getattr(
+                                st.session_state.agent, "suggestions", []) or []),
                         })
 
                     except Exception as exc:
