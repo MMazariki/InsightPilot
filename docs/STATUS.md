@@ -1,6 +1,6 @@
 # InsightPilot status snapshot, 2026-11-17
 
-Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change that followed the same day). All 658 offline tests pass
+Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change that followed the same day). All 678 offline tests pass
 (`.venv\Scripts\python.exe -m pytest tests -q`). The app is running.
 
 ## What exists and works
@@ -11,7 +11,7 @@ Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change
 | Interface | InsightPilot branding, starter questions, New chat, collapsible query details | Seen in the live page |
 | Local assistant | Pipeline v11 on `qwen2.5-coder:7b` (Ollama), read-only Power BI queries | Real questions answered in the live app |
 | Admin page | Gear button or `?view=admin`: models and providers, answer checks, Power BI, interface, voice | Live page; local model test button. Cloud providers (OpenAI-compatible, Anthropic) are unit-tested with fakes only and have never been called live. |
-| Charts in the report | Every answered question builds a visual from the checked plan (card, column, bar, line, combo, legend, table) with the answer's filters and top-N applied; it replaces whatever is on the AI Canvas page. Report component rebuilt 2026-11-17. | The request reaches the panel (log) and the rebuilt component loads. Drawing, filters, titles and replacement inside the signed-in report were NOT seen by the developer; filter or title failures are caught and reported in the panel's status line. |
+| Charts in the report | Every answered question builds a visual from the checked plan (card, pie, donut, column, bar, line, combo, legend, table; a chart type named in the question wins) with the answer's filters and top-N applied; it replaces whatever is on the AI Canvas page. Report component rebuilt 2026-11-17. | The request reaches the panel (log) and the rebuilt component loads. Drawing, filters, titles and replacement inside the signed-in report were NOT seen by the developer; filter or title failures are caught and reported in the panel's status line. |
 | Report page link | The "AI Canvas" page is looked up by name, so republishing cannot break it | Live lookup returned the current page |
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | Fake microphone in a real browser; the user's own recordings were transcribed on 2026-11-17 (log: 6.5 s and 7.7 s clips, 41 and 52 characters) |
 | Data | Source CSVs extended with generated 2026 data (27,143 lines, 1 Jan to 16 Nov 2026); dataset refreshed and republished by the user | Published dataset matches the CSVs month by month |

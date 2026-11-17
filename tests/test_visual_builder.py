@@ -295,3 +295,106 @@ def test_app_settings_turn_charts_on_by_default_and_can_turn_them_off():
     kwargs = agent_factory.structured_agent_kwargs(
         settings, secrets={}, powerbi=FakePowerBI())
     assert kwargs["options"]["create_visuals"] is False
+
+
+# ---- Pie charts and named chart types ----------------------------------
+
+from src.visual_builder import chart_preference  # noqa: E402
+
+
+@pytest.mark.parametrize("question,expected_type,cleaned", [
+    ("Show net sales by region as a pie chart.", "pieChart",
+     "Show net sales by region."),
+    ("Pie chart of gross profit by channel", "pieChart",
+     "Gross profit by channel"),
+    ("Show me a donut chart showing units sold by store type", "donutChart",
+     "Show me units sold by store type"),
+    ("Net sales by month in a line graph", "lineChart", "Net sales by month"),
+    ("Give me a bar chart for net sales by brand", "clusteredBarChart",
+     "Give me net sales by brand"),
+    ("Net sales by region", None, "Net sales by region"),
+    ("Which bar sold the most?", None, "Which bar sold the most?"),
+])
+def test_chart_preference(question, expected_type, cleaned):
+    assert chart_preference(question) == (expected_type, cleaned)
+
+
+def test_small_part_of_whole_answer_becomes_a_pie():
+    request, _ = build_visual_request(
+        plan(group_by=[("FactSales", "Channel")]),
+        "Show gross profit by sales channel.", row_count=3)
+    assert request["visualType"] == "pieChart"
+    assert [f["role"] for f in request["fields"]] == ["Category", "Y"]
+
+
+@pytest.mark.parametrize("question,row_count,expected", [
+    ("Net sales by region", 5, "pieChart"),
+    ("Net sales by region", 9, "clusteredColumnChart"),       # too many slices
+    ("Net sales by region", None, "clusteredColumnChart"),    # size unknown
+    ("Compare net sales across regions", 5, "clusteredColumnChart"),
+    ("Which region has the highest net sales?", 5, "clusteredColumnChart"),
+    ("What is the share of net sales by region?", 9, "pieChart"),
+    ("Net sales split by region", None, "pieChart"),
+    ("Share of net sales by region", 20, "clusteredColumnChart"),
+])
+def test_when_a_pie_is_chosen(question, row_count, expected):
+    request, _ = build_visual_request(plan(), question, row_count=row_count)
+    assert request["visualType"] == expected
+
+
+def test_no_automatic_pie_for_time_ratios_or_counts():
+    request, _ = build_visual_request(
+        plan(group_by=[("DimDate", "Quarter")]), "Net sales by quarter", row_count=4)
+    assert request["visualType"] == "lineChart"
+    request, _ = build_visual_request(
+        plan(metrics=("Margin %",)), "Margin % by region", row_count=5)
+    assert request["visualType"] == "clusteredColumnChart"
+    request, _ = build_visual_request(
+        plan(metrics=("Variance",)), "Variance by region", row_count=5)
+    assert request["visualType"] == "clusteredColumnChart"
+    request, _ = build_visual_request(
+        plan(metrics=[CUSTOMERS]), "Customers by region", row_count=5)
+    assert request["visualType"] == "clusteredColumnChart"
+
+
+def test_a_named_chart_type_wins():
+    request, _ = build_visual_request(
+        plan(), "Net sales by region", preferred_type="donutChart", row_count=30)
+    assert request["visualType"] == "donutChart"
+    request, _ = build_visual_request(
+        plan(group_by=[("DimDate", "MonthName")]), "Net sales by month",
+        preferred_type="clusteredBarChart")
+    assert request["visualType"] == "clusteredBarChart"
+
+
+def test_agent_plans_without_the_chart_words_and_draws_the_named_chart():
+    seen = {}
+
+    def generate(model, question, instructions):
+        seen["question"] = question
+        return json.dumps(plan())
+
+    agent = StructuredPlanningAgent(
+        model="m", powerbi=FakePowerBI(), generate=generate,
+        chat=lambda model, messages: json.dumps({"faithful": True, "reason": ""}),
+        options={"create_visuals": True})
+    answer = agent.ask("Show net sales by region as a pie chart.")
+    assert seen["question"] == "Show net sales by region."
+    assert agent.pending_visual_request["visualType"] == "pieChart"
+    assert agent.pending_visual_request["title"] == "Show net sales by region."
+    assert agent.last_trace["chart_requested"] == "pieChart"
+    assert "A chart of this answer replaced" in answer
+
+
+def test_agent_leaves_the_question_alone_when_charts_are_off():
+    seen = {}
+
+    def generate(model, question, instructions):
+        seen["question"] = question
+        return json.dumps(plan())
+
+    agent = StructuredPlanningAgent(
+        model="m", powerbi=FakePowerBI(), generate=generate,
+        chat=lambda model, messages: json.dumps({"faithful": True, "reason": ""}))
+    agent.ask("Net sales by region as a pie chart")
+    assert seen["question"] == "Net sales by region as a pie chart"

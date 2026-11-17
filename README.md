@@ -24,9 +24,13 @@ When you are signed in to the report on the right, every answered question
 also puts a visual on the report's "AI Canvas" page, replacing the previous
 one. It is built from the checked query plan, not by a model:
 
-* a single total becomes a card; one breakdown becomes a column, bar or line
-  chart (column-and-line for two measures); two breakdowns use the second as
-  the legend; three or more become a table;
+* a single total becomes a card; one breakdown becomes a pie (a
+  part-of-whole answer with up to six slices, or a question about share,
+  split or breakdown), otherwise a column, bar or line chart
+  (column-and-line for two measures); two breakdowns use the second as the
+  legend; three or more become a table;
+* you can name the chart: add "as a pie chart", "donut chart", "bar chart",
+  "column chart" or "line chart" to the question;
 * the answer's filters, including "top N", are applied to the visual so it
   shows the same rows as the table, and the question is its title;
 * a calculated ratio (for example units per order) cannot be shown in a

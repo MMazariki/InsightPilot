@@ -11,6 +11,7 @@ Request sent to the report component (``powerbi_embed_component``):
 
     {
       "visualType": "clusteredColumnChart" | "clusteredBarChart" | "lineChart"
+                    | "pieChart" | "donutChart"
                     | "lineClusteredColumnComboChart" | "card" | "multiRowCard"
                     | "tableEx",
       "fields":  [{"role": "Category" | "Series" | "Y" | "Y2" | "Values",
@@ -23,8 +24,12 @@ Request sent to the report component (``powerbi_embed_component``):
 Shape of the visual:
 
 * no breakdown        one metric -> card, several -> multi-row card
-* one breakdown       column chart; bar for long lists; line for time;
-                      column-and-line combination for two metrics
+* one breakdown       pie for a part-of-whole answer with up to six slices
+                      (or when the question says share, split, breakdown
+                      ...); otherwise column, bar for long lists, line for
+                      time; column-and-line combination for two metrics.
+                      A chart type named in the question (pie, donut, bar,
+                      column, line) wins.
 * two breakdowns      column or line chart with the second as the legend
 * three or more       table
 
@@ -33,6 +38,8 @@ the column with a distinct-count aggregation; a ratio of two expressions
 cannot be bound to a visual and is left out (``notes`` says so). If nothing
 can be bound, no visual is built.
 """
+
+import re
 
 from evaluation.query_plan_validator import load_model
 
@@ -47,6 +54,38 @@ LONG_LIST_COLUMNS = {
     "StoreCode",
 }
 
+# Chart types a question can ask for by name ("... as a pie chart").
+CHART_NAMES = {
+    "pie": "pieChart",
+    "donut": "donutChart",
+    "doughnut": "donutChart",
+    "bar": "clusteredBarChart",
+    "column": "clusteredColumnChart",
+    "line": "lineChart",
+}
+_CHART_NOUN = r"(?:chart|graph|diagram)"
+_CHART_TYPE = "(" + "|".join(CHART_NAMES) + ")"
+_CHART_PATTERNS = [
+    # "... as a pie chart", "... in a donut chart"
+    re.compile(rf"\s*\b(?:as|in|on|using|with)\s+(?:an?\s+)?{_CHART_TYPE}\s+{_CHART_NOUN}\b", re.I),
+    # "pie chart of ...", "a bar chart showing ..."
+    re.compile(rf"\b(?:an?\s+)?{_CHART_TYPE}\s+{_CHART_NOUN}\s+(?:of|for|showing|with)\s+", re.I),
+    # any other mention
+    re.compile(rf"\b(?:an?\s+)?{_CHART_TYPE}\s+{_CHART_NOUN}\b", re.I),
+]
+
+# Words that ask for parts of a whole.
+_SHARE_WORDS = re.compile(
+    r"\b(share|shares|split|breakdown|proportion|proportions|mix|composition|"
+    r"distribution|contribution|percentage of|percent of|portion)\b", re.I)
+# Words that ask for a comparison or ranking, where bars read better.
+_COMPARE_WORDS = re.compile(
+    r"\b(compare|comparison|versus|vs|rank|ranking|top|bottom|most|least|"
+    r"highest|lowest|best|worst|trend|over time)\b", re.I)
+# Measures that do not add up to a meaningful whole.
+NON_ADDITIVE_MEASURES = {"Variance", "Sales Variance"}
+PIE_MAX_SLICES = 6
+
 ADVANCED_OPERATORS = {
     "gt": "GreaterThan",
     "gte": "GreaterThanOrEqual",
@@ -58,6 +97,45 @@ REASON_NO_METRIC = "none of the answer's metrics can be shown in a report visual
 NOTE_RATIO = "a calculated ratio is not shown in the chart"
 NOTE_METRIC_FILTER = "a condition on a calculated value is not applied to the chart"
 NOTE_LIMIT = "the row limit is not applied to the chart"
+
+
+def chart_preference(question):
+    """Return ``(visual_type, question_without_the_chart_words)``.
+
+    "Show net sales by region as a pie chart." -> ("pieChart", "Show net
+    sales by region."). The cleaned question is what the planner should see:
+    "pie" and "chart" are not words of the data model.
+    """
+
+    text = str(question or "")
+    for pattern in _CHART_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            cleaned = (text[:match.start()] + " " + text[match.end():])
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            cleaned = re.sub(r"\s+([.?!,])", r"\1", cleaned)
+            if cleaned:
+                cleaned = cleaned[0].upper() + cleaned[1:]
+            return CHART_NAMES[match.group(1).lower()], cleaned or text
+    return None, text
+
+
+def _is_additive(target):
+    name = target.get("measure")
+    return bool(name) and "%" not in name and name not in NON_ADDITIVE_MEASURES
+
+
+def _wants_pie(question, row_count, target, category):
+    """Part-of-whole answers with few slices read best as a pie."""
+
+    if category["column"] in TIME_COLUMNS or not _is_additive(target):
+        return False
+    text = str(question or "")
+    if _SHARE_WORDS.search(text):
+        return row_count is None or row_count <= PIE_MAX_SLICES * 2
+    if _COMPARE_WORDS.search(text):
+        return False
+    return row_count is not None and 2 <= row_count <= PIE_MAX_SLICES
 
 
 def measure_tables(model=None):
@@ -129,13 +207,16 @@ def _filters(plan, targets_by_alias, category, notes):
     return filters
 
 
-def build_visual_request(plan, question=None, model=None):
+def build_visual_request(plan, question=None, model=None, preferred_type=None,
+                         row_count=None):
     """Return ``(request, notes)``.
 
     ``request`` is the dictionary for the report component, or ``None`` when
     nothing in the answer can be shown (``notes`` then holds the reason).
     ``notes`` lists, in plain words, anything in the answer that the visual
-    does not reflect.
+    does not reflect. ``preferred_type`` is a chart type the question asked
+    for by name; ``row_count`` is how many rows the answer has (used to
+    decide whether a pie is readable).
     """
 
     tables = measure_tables(model)
@@ -182,7 +263,11 @@ def build_visual_request(plan, question=None, model=None):
             fields.append({"role": "Y", "target": metric_targets[0]})
             fields.append({"role": "Y2", "target": metric_targets[1]})
         else:
-            if is_time:
+            if preferred_type is not None:
+                visual_type = preferred_type
+            elif _wants_pie(question, row_count, metric_targets[0], category):
+                visual_type = "pieChart"
+            elif is_time:
                 visual_type = "lineChart"
             elif category["column"] in LONG_LIST_COLUMNS:
                 visual_type = "clusteredBarChart"

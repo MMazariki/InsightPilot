@@ -205,8 +205,19 @@ class StructuredPlanningAgent:
         self.last_trace = trace
         LOGGER.info("[%s] question received", trace["trace_id"])
 
+        # A chart type named in the question ("... as a pie chart") is taken
+        # out before planning: it is about the picture, not the data.
+        preferred_chart = None
+        planning_question = question
+        if self.options["create_visuals"]:
+            from src.visual_builder import chart_preference
+
+            preferred_chart, planning_question = chart_preference(question)
+            if preferred_chart:
+                trace["chart_requested"] = preferred_chart
+
         try:
-            response = self.plan(question, trace)
+            response = self.plan(planning_question, trace)
         except ValueError as exc:
             trace["stages"].append("failed_validation")
             trace["error"] = str(exc)
@@ -254,7 +265,9 @@ class StructuredPlanningAgent:
         if self.options["create_visuals"] and result["row_count"] > 0:
             from src.visual_builder import build_visual_request
 
-            request, notes = build_visual_request(plan, question)
+            request, notes = build_visual_request(
+                plan, planning_question, preferred_type=preferred_chart,
+                row_count=result["row_count"])
             if request is not None:
                 self.pending_visual_request = request
                 trace["stages"].append("chart")
