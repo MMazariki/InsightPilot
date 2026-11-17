@@ -23,7 +23,12 @@ import os
 import uuid
 from typing import Any, Callable
 
-from evaluation.answerability import clarification_message, gate
+from evaluation.answerability import (
+    clarification_message,
+    gate,
+    unmatched_measure_message,
+    unmatched_measure_phrases,
+)
 from evaluation.ollama_query_plan_adapter import (
     build_instructions,
     generate_messages,
@@ -86,6 +91,9 @@ DEFAULT_OPTIONS = {
     "no_metric_trigger": True,
     "strict_metric_words": False,
     "verifier_fail_closed": False,
+    # Added after v11 was measured (2026-11-17): decline "net profit"-style
+    # phrases that name no measure instead of substituting another measure.
+    "measure_name_check": True,
     "max_table_rows": MAX_TABLE_ROWS,
     # Add a chart of the answer to the embedded report (off unless the app
     # asks for it; the query path is identical either way).
@@ -143,6 +151,13 @@ class StructuredPlanningAgent:
             detail = blocked["clarification"]
             return {"kind": "clarification", "reason": detail["reason"],
                     "message": detail["message"]}
+
+        if self.options["measure_name_check"]:
+            missing = unmatched_measure_phrases(question)
+            if missing:
+                trace["stages"].append("measure_name:missing")
+                return {"kind": "clarification", "reason": "undefined_metric",
+                        "message": unmatched_measure_message(missing)}
 
         raw = self.generate(self.model, question, self.instructions)
         trace["stages"].append("planner")

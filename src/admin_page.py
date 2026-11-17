@@ -362,6 +362,13 @@ def render(agent_mode_in_use, voice_installed):
             help="By default an unreadable verifier reply lets the answer "
                  "through. On = safer, but an occasional good question is "
                  "declined.")
+        measure_names = st.checkbox(
+            'Decline measures the model does not have ("net profit")',
+            value=p["measure_name_check"], key=_key("measure_name_check"),
+            help='A "net" or "gross" phrase that names no measure is '
+                 "declined with the closest measures, instead of being "
+                 "answered with a different measure. Added after the "
+                 "measured pipeline v11; not part of its accuracy figures.")
         max_rows = st.number_input(
             "Rows shown per answer", min_value=1, max_value=5000,
             value=int(p["max_table_rows"]), step=10, key=_key("max_table_rows"))
@@ -484,6 +491,7 @@ def render(agent_mode_in_use, voice_installed):
             "no_metric_trigger": no_metric,
             "strict_metric_words": strict_words,
             "verifier_fail_closed": fail_closed,
+            "measure_name_check": measure_names,
             "max_table_rows": max_rows,
         },
         "powerbi": {

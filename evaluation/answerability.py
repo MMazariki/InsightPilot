@@ -254,6 +254,60 @@ def gate(question, plan, chat, model_name, vocabulary=None, model=None,
     return result
 
 
+# "net profit", "gross units": a qualifier the model's measures use, followed
+# by a quantity word, that together name no measure. Every word is known, so
+# unknown_terms() cannot see it, and the planner quietly substitutes a
+# different measure ("Net Profit" computed as Net Sales).
+_QUALIFIERS = ("net", "gross")
+_PHRASE = re.compile(r"\b(net|gross)\s+([a-z]+)", re.I)
+# Quantity words that are spelled differently from the measure but mean it.
+_SAME_QUANTITY = {"sale": "sales", "revenue": "sales", "revenues": "sales",
+                  "profits": "profit", "margins": "margin"}
+
+
+def unmatched_measure_phrases(question, model=None):
+    """Return ``[(phrase, [closest measures])]`` for net/gross phrases that
+    name no measure in the model."""
+
+    model = load_model() if model is None else model
+    measures = [measure["Name"] for table in model["Tables"]
+                for measure in table.get("Measures", [])]
+    pairs = set()
+    for name in measures:
+        tokens = _tokens(name)
+        for first, second in zip(tokens, tokens[1:]):
+            if first in _QUALIFIERS:
+                pairs.add((first, second))
+    found = []
+    for match in _PHRASE.finditer(question):
+        qualifier, word = match.group(1).lower(), match.group(2).lower()
+        if word not in QUANTITY_WORDS:
+            continue  # "net of returns", "gross amount" ...
+        quantity = _SAME_QUANTITY.get(word, word)
+        if (qualifier, quantity) in pairs:
+            continue
+        closest = ([name for name in measures if quantity in _tokens(name)]
+                   or [name for name in measures if qualifier in _tokens(name)])
+        phrase = f"{qualifier} {word}"
+        if phrase not in [item[0] for item in found]:
+            found.append((phrase, sorted(closest)))
+    return found
+
+
+def unmatched_measure_message(found):
+    parts = []
+    for phrase, closest in found:
+        if len(closest) == 1:
+            hint = f" The closest measure is {closest[0]}."
+        elif closest:
+            hint = " The closest measures are " + ", ".join(closest) + "."
+        else:
+            hint = ""
+        parts.append(f"The semantic model has no {phrase.title()} measure."
+                     f"{hint}")
+    return " ".join(parts) + " Please ask again naming the measure you want."
+
+
 def clarification_message(result):
     terms = ", ".join(result["unknown_terms"])
     reason = (result.get("verdict") or {}).get("reason", "")

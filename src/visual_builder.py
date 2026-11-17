@@ -99,25 +99,64 @@ NOTE_METRIC_FILTER = "a condition on a calculated value is not applied to the ch
 NOTE_LIMIT = "the row limit is not applied to the chart"
 
 
+# A chart asked for without a type ("create a chart of ...", "... as a
+# graph"): the words are removed, the type is chosen from the answer.
+_ANY_CHART = r"(?:chart|graph|plot|visual|visuali[sz]ation|diagram)"
+_GENERIC_PATTERNS = [
+    re.compile(rf"\b(?:an?\s+)?{_ANY_CHART}\s+(?:of|for|showing|with|on|about)\s+", re.I),
+    re.compile(rf"\s*\b(?:as|in|on|using|with)\s+(?:an?\s+)?{_ANY_CHART}\b", re.I),
+    re.compile(rf"\b(?:an?\s+)?{_ANY_CHART}\b", re.I),
+]
+# Request verbs left at the start once the chart words are gone
+# ("Create net profit by year" -> "Net profit by year").
+_LEAD_VERB = re.compile(
+    r"^\s*(?:please\s+)?(?:create|make|draw|build|plot|generate|produce|"
+    r"visuali[sz]e|chart|graph)\s+(?:me\s+)?", re.I)
+# Verbs that mean "draw it" even when no chart noun is present.
+_DRAW_VERB = re.compile(
+    r"^\s*(?:please\s+)?(?:draw|plot|visuali[sz]e|chart|graph)\s+(?:me\s+)?", re.I)
+
+
+def _tidy(text):
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([.?!,])", r"\1", text)
+    text = re.sub(r"^[.?!,]+\s*", "", text)
+    return text[0].upper() + text[1:] if text else text
+
+
 def chart_preference(question):
     """Return ``(visual_type, question_without_the_chart_words)``.
 
     "Show net sales by region as a pie chart." -> ("pieChart", "Show net
-    sales by region."). The cleaned question is what the planner should see:
-    "pie" and "chart" are not words of the data model.
+    sales by region."). "Create chart with net sales over years." -> (None,
+    "Net sales over years."). The cleaned question is what the planner and
+    the answer checks see: "create", "pie" and "chart" are not words of the
+    data model. ``visual_type`` is ``None`` when no chart type was named.
     """
 
     text = str(question or "")
+    visual_type = None
+    match = None
     for pattern in _CHART_PATTERNS:
         match = pattern.search(text)
         if match:
-            cleaned = (text[:match.start()] + " " + text[match.end():])
-            cleaned = re.sub(r"\s+", " ", cleaned).strip()
-            cleaned = re.sub(r"\s+([.?!,])", r"\1", cleaned)
-            if cleaned:
-                cleaned = cleaned[0].upper() + cleaned[1:]
-            return CHART_NAMES[match.group(1).lower()], cleaned or text
-    return None, text
+            visual_type = CHART_NAMES[match.group(1).lower()]
+            break
+    if match is None:
+        for pattern in _GENERIC_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                break
+
+    if match is not None:
+        cleaned = text[:match.start()] + " " + text[match.end():]
+        cleaned = _LEAD_VERB.sub("", _tidy(cleaned))
+    else:
+        cleaned = _DRAW_VERB.sub("", text)
+    cleaned = _tidy(cleaned)
+    if not cleaned or cleaned == _tidy(text):
+        return visual_type, text
+    return visual_type, cleaned
 
 
 def _is_additive(target):

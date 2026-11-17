@@ -314,6 +314,17 @@ from src.visual_builder import chart_preference  # noqa: E402
      "Give me net sales by brand"),
     ("Net sales by region", None, "Net sales by region"),
     ("Which bar sold the most?", None, "Which bar sold the most?"),
+    # A chart without a type: the words go, the type is chosen later.
+    ("Create chart with net profit over years.", None,
+     "Net profit over years."),
+    ("Create a pie chart of net sales by region", "pieChart",
+     "Net sales by region"),
+    ("Make a graph of units sold by category", None,
+     "Units sold by category"),
+    ("Plot net sales by month", None, "Net sales by month"),
+    ("Net sales by year as a chart", None, "Net sales by year"),
+    ("Show gross profit by sales channel.", None,
+     "Show gross profit by sales channel."),
 ])
 def test_chart_preference(question, expected_type, cleaned):
     assert chart_preference(question) == (expected_type, cleaned)

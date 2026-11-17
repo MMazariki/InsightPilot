@@ -30,7 +30,9 @@ one. It is built from the checked query plan, not by a model:
   (column-and-line for two measures); two breakdowns use the second as the
   legend; three or more become a table;
 * you can name the chart: add "as a pie chart", "donut chart", "bar chart",
-  "column chart" or "line chart" to the question;
+  "column chart" or "line chart" to the question; "create a chart of ..."
+  without a type also works (the words are removed before the question is
+  checked);
 * the answer's filters, including "top N", are applied to the visual so it
   shows the same rows as the table, and the question is its title;
 * a calculated ratio (for example units per order) cannot be shown in a

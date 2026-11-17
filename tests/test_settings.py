@@ -25,7 +25,7 @@ def test_defaults_are_valid_and_match_measured_configuration():
         "request_guard": True, "repair_turn": True,
         "answerability_check": True, "no_metric_trigger": True,
         "strict_metric_words": False, "verifier_fail_closed": False,
-        "max_table_rows": 50,
+        "measure_name_check": True, "max_table_rows": 50,
     }
     assert app_settings.is_default(clean)
     assert not app_settings.uses_cloud(clean)

@@ -39,7 +39,13 @@ Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change
 6. **Memory.** Windows had no page file; the user enabled it on 2026-11-17
    after Ollama failed to load the model. If "out of free memory" returns,
    close large applications.
-7. **Voice.** English only. If words are misheard, switch the speech model to
+7. **Measure names.** A "net"/"gross" phrase that names no measure (for
+   example "net profit"; the model has Gross Profit and Net Sales) is now
+   declined with the closest measure instead of being answered with a
+   different one. Before this, "Net profit over years" returned Net Sales
+   labelled "Net Profit". The check was added after v11 was measured and is
+   an Admin switch (Answer checks), on by default.
+8. **Voice.** English only. If words are misheard, switch the speech model to
    `small.en` in Admin settings and restart.
 
 ## Where things are

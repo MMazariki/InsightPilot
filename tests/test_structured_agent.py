@@ -236,3 +236,35 @@ def test_agent_accepts_grouped_column_echo_without_repair():
     assert '"Sales Channel"' not in powerbi.queries[0]
     assert agent.last_trace["normalizations"][0]["kind"] == (
         "grouped_column_metric_dropped")
+
+
+def test_measure_the_model_lacks_is_declined_before_planning():
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([], powerbi)
+    answer = agent.ask("Net profit over years.")
+    assert calls["generate"] == 0 and powerbi.queries == []
+    assert "no Net Profit measure" in answer
+    assert "Gross Profit" in answer
+    assert agent.last_trace["stages"][0] == "measure_name:missing"
+
+
+def test_measure_name_check_can_be_switched_off():
+    powerbi = FakePowerBI()
+    agent, calls = make_agent([json.dumps(PLAN)], powerbi)
+    agent.options["measure_name_check"] = False
+    agent.ask("Net profit by region.")
+    assert calls["generate"] == 1
+
+
+@pytest.mark.parametrize("question,missing", [
+    ("Net profit over years.", ["net profit"]),
+    ("gross units by store", ["gross units"]),
+    ("Net sales by year", []),
+    ("Net revenue by month", []),
+    ("Gross margin % by city", []),
+    ("Gross profit by region", []),
+    ("Sales net of discounts", []),
+])
+def test_unmatched_measure_phrases(question, missing):
+    from evaluation.answerability import unmatched_measure_phrases
+    assert [p for p, _ in unmatched_measure_phrases(question)] == missing
