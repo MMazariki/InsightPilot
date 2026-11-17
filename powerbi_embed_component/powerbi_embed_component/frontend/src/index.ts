@@ -445,8 +445,12 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
         permissions: models.Permissions.ReadWrite,
         viewMode: models.ViewMode.Edit,
         settings: {
+          // Filters, Visualizations and Data start collapsed so the chart
+          // gets the room; each can still be opened from its edge tab.
           panes: {
-            filters: { visible: true },
+            filters: { visible: true, expanded: false },
+            visualizations: { visible: true, expanded: false },
+            fields: { visible: true, expanded: false },
             pageNavigation: { visible: true },
           },
         },
