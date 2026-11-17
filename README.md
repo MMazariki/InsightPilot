@@ -80,6 +80,11 @@ documents do not cover a question, it says so instead of guessing.
   `nomic-embed-text` (meaning) plus keyword matching, answers by
   `qwen2.5:7b-instruct`. Nothing leaves this computer. The PDFs and the
   index (`rag_index/`) are not committed to git.
+* **Asking by voice** works as on the Power BI page: click the microphone
+  in the question box, speak, click the tick; the words appear in the box
+  to check (or are sent at once when Admin → Voice → auto-send is on).
+  Speech is turned into text on this computer (whisper.cpp), with a
+  neutral prompt rather than the Power BI page's sales vocabulary.
 * **Read aloud** under each answer speaks it with the browser's own voices
   (local Windows voices such as Microsoft David or Zira are preferred, so
   the text is not sent anywhere); click again to stop. Switch it off in

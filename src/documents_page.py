@@ -93,6 +93,80 @@ def _render_answer(message, folder, show_excerpts, index, read_aloud=True,
                     use_container_width=True)
 
 
+# ----------------------------------------------------------------- voice
+# Spoken questions, as on the Power BI page: whisper.cpp on this computer,
+# the words go into the box to check (or are sent at once when Admin ->
+# Voice -> auto-send is on).
+
+DOC_VOICE_PROMPT = "Questions about the documents in this folder."
+
+
+@st.cache_resource(show_spinner=False)
+def _transcriber():
+    from src import voice
+
+    # A neutral prompt: the Power BI page's prompt is sales vocabulary.
+    return voice.Transcriber(prompt=DOC_VOICE_PROMPT)
+
+
+def _question_input(folder_id, folder_ready, history):
+    """The question box (with a microphone when speech-to-text is installed).
+    Returns the question to answer now, or ``None``."""
+
+    from src import voice
+
+    enabled = voice.is_available()
+    notice = st.session_state.pop("doc_voice_notice", None)
+    if notice:
+        (st.warning if notice["kind"] == "error" else st.info)(
+            notice["text"], icon=":material/mic_off:" if notice["kind"] == "error"
+            else ":material/mic:")
+    # A heard question waiting for review goes into the box; this must be
+    # set before the widget is created in this run.
+    draft = st.session_state.pop("doc_voice_draft", None)
+    if draft:
+        st.session_state["doc_chat_input"] = draft
+
+    placeholder = (f"Ask a question about folder {folder_id}"
+                   + (", or use the microphone..." if enabled else "...")
+                   if folder_ready else "Enter a folder number first")
+    if enabled:
+        submission = st.chat_input(placeholder, key="doc_chat_input",
+                                   disabled=not folder_ready, accept_audio=True,
+                                   audio_sample_rate=voice.SAMPLE_RATE)
+    else:
+        submission = st.chat_input(placeholder, key="doc_chat_input",
+                                   disabled=not folder_ready)
+    typed, audio = voice.split_submission(submission)
+    if enabled and folder_ready:
+        st.html('<div class="ip-voice-hint">To ask by voice: click the microphone, '
+                "speak, then click the <b>tick (&#10003;)</b> to finish. Your words "
+                "appear in the box; press Enter to send.</div>")
+        if submission is not None:
+            # Levels only, never content (see src/voice.py).
+            print(f"[VOICE] documents submission: audio="
+                  f"{len(audio) if audio else 0} bytes, typed={len(typed)} characters",
+                  flush=True)
+    if not audio:
+        return typed or None
+
+    heard = ""
+    with history, st.spinner("Transcribing your voice..."):
+        try:
+            heard = voice.transcribe_wav(audio, _transcriber())
+        except voice.VoiceError as exc:
+            st.session_state.doc_voice_notice = {"kind": "error", "text": str(exc)}
+    combined = " ".join(part for part in (typed, heard) if part)
+    if heard and voice.autosend_enabled():
+        return combined
+    if heard:
+        st.session_state.doc_voice_notice = {
+            "kind": "info", "text": "Check the question in the box, then press Enter "
+                                    "to send it."}
+    st.session_state.doc_voice_draft = combined or None
+    st.rerun()
+
+
 def _run_index(service, rebuild, slot):
     bar = slot.progress(0.0, text="Starting...")
 
@@ -285,10 +359,7 @@ def render(settings):
                                        f"{folder_id}-{index}", config["read_aloud"],
                                        config["show_downloads"], config["read_aloud_rate"])
 
-        question = st.chat_input(
-            f"Ask a question about folder {folder_id}..." if folder_ready
-            else "Enter a folder number first", key="doc_chat_input",
-            disabled=not folder_ready)
+        question = _question_input(folder_id, folder_ready, history)
         queued = st.session_state.pop("doc_queued", None)
         if queued and not question:
             question = queued
