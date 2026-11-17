@@ -191,11 +191,12 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
 .st-key-starters button p { font-size: .9rem; }
 
 /* Buttons and input */
-.st-key-open_admin button {
+.st-key-open_admin button, .st-key-open_evaluation button {
     border-radius: 10px; border: 1px solid var(--ip-line);
     color: #475467; background: #fff; padding-left: 0; padding-right: 0;
 }
-.st-key-open_admin button:hover { border-color: var(--ip-blue); color: var(--ip-blue); }
+.st-key-open_admin button:hover, .st-key-open_evaluation button:hover {
+    border-color: var(--ip-blue); color: var(--ip-blue); }
 .st-key-new_chat button {
     border-radius: 10px; border: 1px solid var(--ip-line);
     color: #344054; font-weight: 500; background: #fff;
@@ -265,8 +266,8 @@ def get_transcriber():
     return voice.Transcriber()
 if "view" not in st.session_state:
     requested_view = st.query_params.get("view")
-    st.session_state.view = (requested_view if requested_view in ("admin", "documents")
-                             else "chat")
+    st.session_state.view = (requested_view if requested_view in
+                             ("admin", "documents", "evaluation") else "chat")
 
 # Rebuild the agent when the saved settings or API keys change.
 SETTINGS_STAMP = app_settings.stamp()
@@ -305,6 +306,10 @@ def open_admin():
 
 def open_documents():
     st.session_state.view = "documents"
+
+
+def open_evaluation():
+    st.session_state.view = "evaluation"
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -444,6 +449,18 @@ if st.session_state.view == "documents":
 
 
 # =====================================================
+# EVALUATION DASHBOARD
+# =====================================================
+
+if st.session_state.view == "evaluation":
+    from src import evaluation_page
+
+    with st.container(border=True, key="eval_page"):
+        evaluation_page.render()
+    st.stop()
+
+
+# =====================================================
 # MAIN LAYOUT
 # =====================================================
 
@@ -459,8 +476,8 @@ chat_column, report_column = st.columns(
 
 with chat_column, st.container(border=True, key="chat_card"):
 
-    title_column, docs_column, action_column, admin_column = st.columns(
-        [2.6, 1.1, 1, 0.34], vertical_alignment="center")
+    title_column, docs_column, action_column, eval_column, admin_column = st.columns(
+        [2.3, 1.1, 1, 0.34, 0.34], vertical_alignment="center")
     with title_column:
         st.html(
             '<div class="ip-card-title">Ask InsightPilot</div>'
@@ -483,6 +500,15 @@ with chat_column, st.container(border=True, key="chat_card"):
             icon=":material/add_comment:",
             on_click=reset_conversation,
             disabled=not st.session_state.messages,
+            use_container_width=True,
+        )
+    with eval_column:
+        st.button(
+            "",
+            key="open_evaluation",
+            icon=":material/monitoring:",
+            help="Evaluation dashboard: measured accuracy, insights and reruns",
+            on_click=open_evaluation,
             use_container_width=True,
         )
     with admin_column:
