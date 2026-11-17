@@ -126,6 +126,7 @@ DEFAULTS = {
         "top_k": 6,
         "min_score": 0.3,
         "show_excerpts": True,
+        "read_aloud": True,
     },
 }
 
@@ -308,7 +309,7 @@ def validate(raw):
     base = DEFAULTS["documents"]
     for name in ("folder", "ollama_url", "embedding_model", "answer_model"):
         clean["documents"][name] = _text(docs.get(name, base[name])) or base[name]
-    for name in ("recursive", "show_excerpts"):
+    for name in ("recursive", "show_excerpts", "read_aloud"):
         clean["documents"][name] = bool(docs.get(name, base[name]))
     labels = {"answer_timeout": ("Answer timeout", int),
               "chunk_chars": ("Passage size", int),

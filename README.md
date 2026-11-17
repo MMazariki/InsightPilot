@@ -72,6 +72,10 @@ documents do not cover a question, it says so instead of guessing.
   `nomic-embed-text` (meaning) plus keyword matching, answers by
   `qwen2.5:7b-instruct`. Nothing leaves this computer. The PDFs and the
   index (`rag_index/`) are not committed to git.
+* **Read aloud** under each answer speaks it with the browser's own voices
+  (local Windows voices such as Microsoft David or Zira are preferred, so
+  the text is not sent anywhere); click again to stop. Switch it off in
+  Admin → Documents.
 * **Search only in** limits a question to chosen files; short follow-up
   questions ("and for returns?") use the previous question too.
 * Design and decisions: [`docs/RAG_PLAN.md`](docs/RAG_PLAN.md).

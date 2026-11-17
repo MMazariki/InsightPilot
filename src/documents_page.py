@@ -50,11 +50,15 @@ def _pages(source):
     return f"pp. {source['page_start']}-{source['page_end']}"
 
 
-def _render_answer(message, folder, show_excerpts, index):
+def _render_answer(message, folder, show_excerpts, index, read_aloud=True):
     if not message.get("found", True):
         st.info(message["content"], icon=":material/search_off:")
         return
     st.markdown(message["content"])
+    if read_aloud and not message["content"].startswith("**Error:**"):
+        from src.read_aloud import read_aloud_button
+
+        read_aloud_button(message["content"], f"doc-answer-{index}")
     if not message.get("cited", True):
         st.caption(":material/warning: This answer is not linked to a source; "
                    "check it against the documents.")
@@ -215,7 +219,8 @@ def render(settings):
                         st.markdown(message["content"])
                 else:
                     with st.chat_message("assistant", avatar=":material/description:"):
-                        _render_answer(message, folder, config["show_excerpts"], index)
+                        _render_answer(message, folder, config["show_excerpts"], index,
+                                       config["read_aloud"])
 
         question = st.chat_input("Ask a question about your documents...",
                                  key="doc_chat_input",

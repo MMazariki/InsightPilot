@@ -268,3 +268,20 @@ def test_documents_settings_validate():
     changed = app_settings.defaults()
     changed["documents"]["top_k"] = 3
     assert app_settings.is_default(changed)
+
+
+# --------------------------------------------------------------- read aloud
+
+def test_speakable_text_drops_citations_and_markdown():
+    from src.read_aloud import sentences, speakable
+    text = "- **Enterprise Data Architect** at Malahi [3]\n- Since 2024 [1][2]."
+    assert speakable(text) == "Enterprise Data Architect at Malahi. Since 2024."
+    assert sentences("First point [1]. Second point? Third!") == [
+        "First point.", "Second point?", "Third!"]
+    assert sentences("") == []
+
+
+def test_read_aloud_setting_defaults_on():
+    assert app_settings.DEFAULTS["documents"]["read_aloud"] is True
+    clean, _ = app_settings.validate({"documents": {"read_aloud": False}})
+    assert clean["documents"]["read_aloud"] is False

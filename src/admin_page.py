@@ -519,6 +519,11 @@ def render(agent_mode_in_use, voice_installed):
             doc_excerpts = st.checkbox(
                 "Show the passages used under each answer",
                 value=d["show_excerpts"], key=_key("doc_excerpts"))
+            doc_read_aloud = st.checkbox(
+                "Read aloud button under each answer",
+                value=d["read_aloud"], key=_key("doc_read_aloud"),
+                help="Uses the browser's own voices (local Windows voices "
+                     "first), so the answer is not sent anywhere.")
 
     # ----------------------------------------------------------- About
     with tabs[6]:
@@ -574,6 +579,7 @@ def render(agent_mode_in_use, voice_installed):
             "chunk_chars": doc_chunk, "overlap_chars": doc_overlap,
             "top_k": doc_top_k, "min_score": doc_min_score,
             "show_excerpts": doc_excerpts,
+            "read_aloud": doc_read_aloud,
         },
     }
     clean, errors = app_settings.validate(edited)
