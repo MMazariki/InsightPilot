@@ -386,6 +386,16 @@ else:
     )
     tagline = "AI-powered business intelligence on your Power BI model."
 
+if st.session_state.view == "documents":
+    documents_settings = SETTINGS["documents"]
+    pills = (
+        f'<span class="ip-pill">Answers · {documents_settings["answer_model"]}</span>'
+        f'<span class="ip-pill">Search · {documents_settings["embedding_model"]}</span>'
+        '<span class="ip-pill">PDFs stay on this computer</span>'
+    )
+    tagline = ("Ask your PDF documents in plain language. Answers come only from "
+               "the documents, with file and page.")
+
 st.html(
     f"""
 <div class="ip-brand">
