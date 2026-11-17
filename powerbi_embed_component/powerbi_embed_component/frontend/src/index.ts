@@ -172,7 +172,19 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
     page: Awaited<ReturnType<Report["getPages"]>>[number],
     request: AgentVisualRequest,
   ): Promise<string> => {
-    const response = await page.createVisual(request.visualType);
+    // The answer's chart fills the whole page: (0, 0) at the page's size.
+    // This changes only the embedded view, never the saved report.
+    const pageSize = {
+      width: page.defaultSize?.width ?? 1280,
+      height: page.defaultSize?.height ?? 720,
+    };
+    const fullPage: models.IVisualLayout = {
+      x: 0,
+      y: 0,
+      width: pageSize.width,
+      height: pageSize.height,
+    };
+    const response = await page.createVisual(request.visualType, fullPage);
     const visual = response.visual;
 
     try {
@@ -225,6 +237,24 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
           "Chart added, but its filters could not be applied: it shows unfiltered data.",
         );
       }
+    }
+
+    // Some visual types ignore the creation layout: move and resize again,
+    // then log what the page reports.
+    try {
+      await page.moveVisual(visual.name, 0, 0);
+      await page.resizeVisual(visual.name, pageSize.width, pageSize.height);
+      const placed = (await page.getVisuals()).find(
+        (item) => item.name === visual.name,
+      );
+      console.log("AGENTIC VISUAL LAYOUT:", {
+        visual: visual.name,
+        visualType: request.visualType,
+        pageSize,
+        layout: placed?.layout,
+      });
+    } catch (error) {
+      console.error("AGENTIC VISUAL LAYOUT FAILED:", error);
     }
 
     if (request.title) {
@@ -445,6 +475,11 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
         permissions: models.Permissions.ReadWrite,
         viewMode: models.ViewMode.Edit,
         settings: {
+          // Scale the page to fit the panel (embedded view only).
+          layoutType: models.LayoutType.Custom,
+          customLayout: {
+            displayOption: models.DisplayOption.FitToPage,
+          },
           // Filters, Visualizations and Data start collapsed so the chart
           // gets the room; each can still be opened from its edge tab.
           panes: {
@@ -457,6 +492,13 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
       };
 
       embeddedReport = powerbi.embed(reportContainer, config) as Report;
+
+      console.log("AGENTIC EMBED LAYOUT:", {
+        layoutType: config.settings?.layoutType,
+        displayOption: (config.settings as any)?.customLayout?.displayOption,
+        fitToPage: models.DisplayOption.FitToPage,
+        panes: config.settings?.panes,
+      });
 
       embeddedReport.on("loaded", async () => {
         if (disposed || !embeddedReport) return;
