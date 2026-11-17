@@ -14,14 +14,14 @@ Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change
 | Charts in the report | Every answered question builds a visual from the checked plan (card, pie, donut, column, bar, line, combo, legend, table; a chart type named in the question wins) with the answer's filters and top-N applied; it replaces whatever is on the AI Canvas page. Report component rebuilt 2026-11-17. | The request reaches the panel (log) and the rebuilt component loads. Drawing, filters, titles and replacement inside the signed-in report were NOT seen by the developer; filter or title failures are caught and reported in the panel's status line. |
 | Report page link | The "AI Canvas" page is looked up by name, so republishing cannot break it | Live lookup returned the current page |
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | Fake microphone in a real browser; the user's own recordings were transcribed on 2026-11-17 (log: 6.5 s and 7.7 s clips, 41 and 52 characters) |
-| Data | Source CSVs: 2021–2024 generated 2026-11-17 (71,340 lines), 2025 as delivered, 2026 generated 2026-11-16; 122,483 lines in all | 2026: published dataset matched the CSVs month by month. 2021–2024: CSV integrity checks only, until the user refreshes and republishes. |
-| Model measures | Synced with the published dataset by `scripts/sync_model_schema.py`: Cost and Quantity added, `FactSales[Quantity]` renamed `TotalQuantity`. Orders (counts sales lines, not orders) and Unit Price (sums prices) are held back until their formulas are fixed | Live questions on Cost and orders |
+| Data | Source CSVs: 2021–2024 generated 2026-11-17 (71,340 lines), 2025 as delivered, 2026 generated 2026-11-16; 122,483 lines in all | 2026: published dataset matched the CSVs month by month. 2021–2024: published dataset matches the CSVs year by year (lines and net sales), checked 2026-11-17. |
+| Model measures | Synced with the published dataset by `scripts/sync_model_schema.py`: Cost, Quantity and Orders (fixed to distinct orders on 2026-11-17) added, `FactSales[Quantity]` renamed `TotalQuantity`. Unit Price is held back: it still sums prices | Live questions on Cost and orders |
 
 ## Open items
 
 1. **Targets ignore dates (Power BI model).** `FactTarget` is related to
    stores but not to dates, so target, variance and target-achievement
-   figures are two-year totals whatever year or month is asked. The user
+   figures are six-year totals (2021-2026) whatever year or month is asked; every year shows the same target, 165,952,822 SAR. The user
    chose to leave this for now. The fix is a month table in the model; the
    app's `evaluation/semantic_model_schema.json` then needs the new
    relationship.
