@@ -298,6 +298,10 @@
         {
           "Name": "Quantity",
           "Type": "Integer"
+        },
+        {
+          "Name": "Orders",
+          "Type": "Integer"
         }
       ],
       "Columns": [
