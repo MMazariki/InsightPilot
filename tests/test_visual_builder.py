@@ -6,24 +6,40 @@ from src import agent_factory
 from src import settings as app_settings
 from src.structured_agent import StructuredPlanningAgent
 from src.visual_builder import (
-    REASON_FILTERED,
-    REASON_NO_BREAKDOWN,
-    REASON_NO_MEASURE,
+    NOTE_LIMIT,
+    NOTE_METRIC_FILTER,
+    NOTE_RATIO,
+    REASON_NO_METRIC,
     build_visual_request,
     measure_tables,
 )
 
+NET = {"table": "FactSales", "measure": "Net Sales"}
+REGION = {"table": "DimStore", "column": "Region"}
+CUSTOMERS = {"alias": "Customers", "expression": {
+    "kind": "distinct_count", "table": "FactSales", "column": "CustomerKey"}}
+RATIO = {"alias": "Units per order", "expression": {
+    "kind": "divide",
+    "numerator": {"kind": "measure", "name": "Units Sold"},
+    "denominator": {"kind": "distinct_count", "table": "FactSales",
+                    "column": "OrderID"}}}
+
 
 def plan(metrics=("Net Sales",), group_by=(("DimStore", "Region"),),
-         filters=(), limit=None):
+         filters=(), limit=None, order_by=()):
     return {
         "metrics": [
             m if isinstance(m, dict) else
             {"alias": m, "expression": {"kind": "measure", "name": m}}
             for m in metrics],
         "group_by": [{"table": t, "column": c} for t, c in group_by],
-        "filters": list(filters), "order_by": [], "limit": limit,
+        "filters": list(filters), "order_by": list(order_by), "limit": limit,
     }
+
+
+def column_filter(table, column, operator, value):
+    return {"type": "column", "table": table, "column": column,
+            "operator": operator, "value": value}
 
 
 def test_measure_tables_come_from_the_model():
@@ -32,13 +48,16 @@ def test_measure_tables_come_from_the_model():
     assert tables["Variance"] == "FactTarget"
 
 
-def test_single_measure_uses_the_shape_the_foundry_agent_produced():
-    request, reason = build_visual_request(plan())
-    assert reason is None
+# ---- Shape -------------------------------------------------------------
+
+def test_one_breakdown_one_measure():
+    request, notes = build_visual_request(plan(), "Net sales by region")
+    assert notes == []
     assert request == {
         "visualType": "clusteredColumnChart",
-        "category": {"table": "DimStore", "column": "Region"},
-        "value": {"table": "FactSales", "measure": "Net Sales"},
+        "fields": [{"role": "Category", "target": REGION},
+                   {"role": "Y", "target": NET}],
+        "title": "Net sales by region",
     }
 
 
@@ -56,48 +75,140 @@ def test_chart_type_follows_the_breakdown(table, column, expected):
 
 def test_two_measures_make_a_combo_chart():
     request, _ = build_visual_request(plan(metrics=("Net Sales", "Margin %")))
-    assert request == {
-        "visualType": "lineClusteredColumnComboChart",
-        "fields": [
-            {"role": "Category",
-             "target": {"table": "DimStore", "column": "Region"}},
-            {"role": "Y", "target": {"table": "FactSales", "measure": "Net Sales"}},
-            {"role": "Y2", "target": {"table": "FactSales", "measure": "Margin %"}},
-        ],
-    }
+    assert request["visualType"] == "lineClusteredColumnComboChart"
+    assert [f["role"] for f in request["fields"]] == ["Category", "Y", "Y2"]
+    assert request["fields"][2]["target"] == {
+        "table": "FactSales", "measure": "Margin %"}
+
+
+def test_a_single_total_becomes_a_card():
+    request, notes = build_visual_request(plan(group_by=[]))
+    assert notes == []
+    assert request == {"visualType": "card",
+                       "fields": [{"role": "Values", "target": NET}]}
+    request, _ = build_visual_request(
+        plan(metrics=("Net Sales", "Gross Profit"), group_by=[]))
+    assert request["visualType"] == "multiRowCard"
+    assert len(request["fields"]) == 2
+
+
+def test_two_breakdowns_use_the_second_as_the_legend():
+    request, _ = build_visual_request(
+        plan(group_by=[("DimStore", "Region"), ("FactSales", "Channel")]))
+    assert request["visualType"] == "clusteredColumnChart"
+    assert request["fields"] == [
+        {"role": "Category", "target": REGION},
+        {"role": "Series", "target": {"table": "FactSales", "column": "Channel"}},
+        {"role": "Y", "target": NET},
+    ]
+
+
+def test_time_goes_on_the_axis_of_a_two_way_breakdown():
+    request, _ = build_visual_request(
+        plan(group_by=[("FactSales", "Channel"), ("DimDate", "YearMonth")]))
+    assert request["visualType"] == "lineChart"
+    assert request["fields"][0]["target"]["column"] == "YearMonth"
+    assert request["fields"][1] == {
+        "role": "Series", "target": {"table": "FactSales", "column": "Channel"}}
+
+
+def test_three_breakdowns_become_a_table():
+    request, _ = build_visual_request(plan(group_by=[
+        ("DimStore", "Region"), ("FactSales", "Channel"), ("DimDate", "Year")]))
+    assert request["visualType"] == "tableEx"
+    assert [f["role"] for f in request["fields"]] == ["Values"] * 4
+
+
+# ---- Metrics -----------------------------------------------------------
+
+def test_distinct_count_is_bound_as_a_column_aggregation():
+    request, notes = build_visual_request(plan(metrics=[CUSTOMERS]))
+    assert notes == []
+    assert request["fields"][1]["target"] == {
+        "table": "FactSales", "column": "CustomerKey",
+        "aggregationFunction": "Count"}
+
+
+def test_a_ratio_is_left_out_and_reported():
+    request, notes = build_visual_request(plan(metrics=["Net Sales", RATIO]))
+    assert notes == [NOTE_RATIO]
+    assert [f["role"] for f in request["fields"]] == ["Category", "Y"]
+
+
+def test_no_visual_when_nothing_can_be_bound():
+    assert build_visual_request(plan(metrics=[RATIO])) == (None, [REASON_NO_METRIC])
+    assert build_visual_request(plan(metrics=("Not A Measure",))) == (
+        None, [REASON_NO_METRIC])
 
 
 def test_variance_measure_resolves_to_its_own_table():
     request, _ = build_visual_request(plan(metrics=("Variance",)))
-    assert request["value"] == {"table": "FactTarget", "measure": "Variance"}
+    assert request["fields"][1]["target"] == {
+        "table": "FactTarget", "measure": "Variance"}
 
 
-@pytest.mark.parametrize("bad_plan,reason", [
-    (plan(group_by=[]), REASON_NO_BREAKDOWN),
-    (plan(group_by=[("DimStore", "Region"), ("FactSales", "Channel")]),
-     REASON_NO_BREAKDOWN),
-    (plan(filters=[{"type": "column", "table": "DimProduct",
-                    "column": "Category", "operator": "eq", "value": "Food"}]),
-     REASON_FILTERED),
-    (plan(limit=5), REASON_FILTERED),
-    (plan(metrics=[{"alias": "Customers", "expression": {
-        "kind": "distinct_count", "table": "FactSales",
-        "column": "CustomerKey"}}]), REASON_NO_MEASURE),
-    (plan(metrics=("Not A Measure",)), REASON_NO_MEASURE),
-])
-def test_no_chart_when_it_would_not_match_the_answer(bad_plan, reason):
-    assert build_visual_request(bad_plan) == (None, reason)
+# ---- Filters -----------------------------------------------------------
+
+def test_column_filters_are_passed_to_the_visual():
+    request, notes = build_visual_request(plan(filters=[
+        column_filter("DimProduct", "Category", "eq", "Food"),
+        column_filter("FactSales", "Channel", "ne", "Delivery"),
+        column_filter("DimDate", "Year", "gte", 2026),
+    ]))
+    assert notes == []
+    assert request["filters"] == [
+        {"kind": "basic", "target": {"table": "DimProduct", "column": "Category"},
+         "operator": "In", "values": ["Food"]},
+        {"kind": "basic", "target": {"table": "FactSales", "column": "Channel"},
+         "operator": "NotIn", "values": ["Delivery"]},
+        {"kind": "advanced", "target": {"table": "DimDate", "column": "Year"},
+         "operator": "GreaterThanOrEqual", "value": 2026},
+    ]
 
 
-def test_computed_metric_is_skipped_but_measures_still_chart():
-    mixed = plan(metrics=[
-        {"alias": "Customers", "expression": {
-            "kind": "distinct_count", "table": "FactSales",
-            "column": "CustomerKey"}},
-        "Net Sales",
-    ])
-    request, _ = build_visual_request(mixed)
-    assert request["value"] == {"table": "FactSales", "measure": "Net Sales"}
+def test_metric_filter_uses_the_measure():
+    request, notes = build_visual_request(plan(filters=[
+        {"type": "metric", "alias": "Net Sales", "operator": "gt", "value": 5000}]))
+    assert notes == []
+    assert request["filters"] == [
+        {"kind": "advanced", "target": NET, "operator": "GreaterThan",
+         "value": 5000}]
+
+
+def test_metric_filter_on_a_ratio_is_reported_not_applied():
+    request, notes = build_visual_request(plan(
+        metrics=["Net Sales", RATIO],
+        filters=[{"type": "metric", "alias": "Units per order",
+                  "operator": "gt", "value": 2}]))
+    assert "filters" not in request
+    assert notes == [NOTE_RATIO, NOTE_METRIC_FILTER]
+
+
+def test_top_n_becomes_a_top_n_filter():
+    request, notes = build_visual_request(plan(
+        limit=5, order_by=[{"field": "Net Sales", "direction": "desc"}]))
+    assert notes == []
+    assert request["filters"] == [{
+        "kind": "topN", "target": REGION, "operator": "Top", "itemCount": 5,
+        "orderBy": NET}]
+    request, _ = build_visual_request(plan(
+        limit=3, order_by=[{"field": "Net Sales", "direction": "asc"}]))
+    assert request["filters"][0]["operator"] == "Bottom"
+
+
+def test_limit_that_cannot_be_expressed_is_reported():
+    request, notes = build_visual_request(plan(
+        group_by=[], limit=1,
+        order_by=[{"field": "Net Sales", "direction": "desc"}]))
+    assert request["visualType"] == "card"
+    assert notes == [NOTE_LIMIT]
+
+
+def test_title_is_the_question_trimmed():
+    request, _ = build_visual_request(plan(), "  Net   sales\nby region  ")
+    assert request["title"] == "Net sales by region"
+    request, _ = build_visual_request(plan(), "x" * 300)
+    assert len(request["title"]) == 120
 
 
 # ---- In the agent ------------------------------------------------------
@@ -133,33 +244,36 @@ def test_agent_does_not_chart_unless_asked():
 def test_agent_sets_visual_request_and_says_so():
     agent = agent_for(plan(), options={"create_visuals": True})
     answer = agent.ask("Net sales by region")
-    assert agent.pending_visual_request == {
-        "visualType": "clusteredColumnChart",
-        "category": {"table": "DimStore", "column": "Region"},
-        "value": {"table": "FactSales", "measure": "Net Sales"},
-    }
-    assert "A chart of this answer was added" in answer
+    assert agent.pending_visual_request["visualType"] == "clusteredColumnChart"
+    assert agent.pending_visual_request["title"] == "Net sales by region"
+    assert "A chart of this answer replaced the one" in answer
     assert agent.last_trace["chart"] == "created"
     # The note sits with the table, before the collapsible details.
     assert answer.index("A chart of this answer") < answer.index(
         "**Query plan and DAX**")
 
 
-def test_agent_clears_the_previous_chart_request():
-    agent = agent_for(plan(), options={"create_visuals": True})
-    agent.ask("Net sales by region")
+def test_every_answered_question_gets_a_visual():
+    filtered = plan(limit=3, order_by=[{"field": "Net Sales", "direction": "desc"}],
+                    filters=[column_filter("DimDate", "Year", "eq", 2026)])
+    for reply in (plan(), plan(group_by=[]), filtered,
+                  plan(group_by=[("DimStore", "Region"), ("FactSales", "Channel")])):
+        agent = agent_for(reply, options={"create_visuals": True})
+        agent.ask("Net sales question")
+        assert agent.pending_visual_request is not None, reply
+
+
+def test_agent_reports_what_the_chart_leaves_out():
+    agent = agent_for(plan(metrics=["Net Sales", RATIO]),
+                      options={"create_visuals": True})
+    answer = agent.ask("Net sales and units per order by region")
     assert agent.pending_visual_request is not None
-    agent.generate = lambda model, question, instructions: json.dumps(
-        plan(group_by=[]))
-    agent.ask("Total net sales")
-    assert agent.pending_visual_request is None
+    assert "Note: a calculated ratio is not shown in the chart" in answer
 
 
-def test_agent_explains_when_a_filtered_answer_gets_no_chart():
-    filtered = plan(limit=3)
-    filtered["order_by"] = [{"field": "Net Sales", "direction": "desc"}]
-    agent = agent_for(filtered, options={"create_visuals": True})
-    answer = agent.ask("Top 3 regions by net sales")
+def test_agent_says_when_no_chart_is_possible():
+    agent = agent_for(plan(metrics=[RATIO]), options={"create_visuals": True})
+    answer = agent.ask("Units per order by region")
     assert agent.pending_visual_request is None
     assert "No chart was added" in answer
 

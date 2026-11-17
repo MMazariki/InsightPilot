@@ -252,17 +252,21 @@ class StructuredPlanningAgent:
 
         chart_note = None
         if self.options["create_visuals"] and result["row_count"] > 0:
-            from src.visual_builder import REASON_FILTERED, build_visual_request
+            from src.visual_builder import build_visual_request
 
-            request, reason = build_visual_request(plan)
+            request, notes = build_visual_request(plan, question)
             if request is not None:
                 self.pending_visual_request = request
                 trace["stages"].append("chart")
-                chart_note = ("_A chart of this answer was added to the Power "
-                              "BI report (sign in on the right to see it)._")
-            elif reason == REASON_FILTERED:
-                chart_note = f"_No chart was added: {reason}._"
-            trace["chart"] = "created" if request is not None else reason
+                chart_note = ("_A chart of this answer replaced the one in the "
+                              "Power BI report (sign in on the right to see "
+                              "it)._")
+                if notes:
+                    chart_note = (chart_note[:-1] + " Note: "
+                                  + "; ".join(notes) + "._")
+            else:
+                chart_note = f"_No chart was added: {'; '.join(notes)}._"
+            trace["chart"] = "created" if request is not None else notes
 
         return "\n\n".join([
             format_result_table(result["columns"], result["rows"],

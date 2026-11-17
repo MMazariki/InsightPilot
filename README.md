@@ -20,13 +20,22 @@ computer only.
 
 ## Charts in the Power BI report
 
-When you are signed in to the report on the right, each answer that can be
-charted is also added to the report as a chart (column, bar, line, or a
-column-and-line combination for two measures). The chart is built from the
-checked query plan, not by a model. No chart is added when the answer has no
-single breakdown, uses a computed metric such as a distinct count, or is
-filtered or limited (the chart could not apply the filter and would show
-different numbers); the answer says so in that last case.
+When you are signed in to the report on the right, every answered question
+also puts a visual on the report's "AI Canvas" page, replacing the previous
+one. It is built from the checked query plan, not by a model:
+
+* a single total becomes a card; one breakdown becomes a column, bar or line
+  chart (column-and-line for two measures); two breakdowns use the second as
+  the legend; three or more become a table;
+* the answer's filters, including "top N", are applied to the visual so it
+  shows the same rows as the table, and the question is its title;
+* a calculated ratio (for example units per order) cannot be shown in a
+  report visual; the answer says when something was left out.
+
+After changing `frontend/src/index.ts`, rebuild with `npm run build` in
+`powerbi_embed_component/powerbi_embed_component/frontend` and copy
+`build/index-*.js` over the one in
+`.venv/Lib/site-packages/powerbi_embed_component/frontend/build`.
 
 ## The data
 
