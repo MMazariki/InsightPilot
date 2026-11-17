@@ -82,6 +82,10 @@ SYNONYMS = [
     (r"(?:gross )?profit margins?", "gross margin %", '"profit margin" as gross margin %'),
     # quantities
     (r"(?:pieces|qty|volume|volumes)(?: sold)?", "units sold", None),
+    # counting orders: the planner otherwise counts units
+    (r"(?:how many|number of|count of|total number of|total|the)\s+orders"
+     r"|^orders(?= by| per| in| for)",
+     "number of distinct orders", '"orders" as number of distinct orders'),
     # places and people
     (r"branch(?:es)?|shops?|outlets?|locations?|sites?|branch", "store", None),
     (r"clients?", "customer", None),
@@ -240,6 +244,29 @@ def _split_year_month(plan):
     return (dict(plan, filters=filters), True) if changed else (plan, False)
 
 
+_ORDERS_ALIAS = re.compile(r"\border(?:s| count)\b", re.I)
+ORDER_COUNT = {"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+
+
+def _count_orders(plan):
+    """A metric labelled "orders" that computes another measure (the
+    planner's repair turn tends to substitute Units Sold) is replaced by
+    the distinct count of order IDs."""
+
+    changed = False
+    metrics = []
+    for metric in plan.get("metrics") or []:
+        expression = metric.get("expression") or {}
+        if (_ORDERS_ALIAS.search(str(metric.get("alias", "")))
+                and expression.get("kind") == "measure"
+                and "order" not in expression.get("name", "").lower()
+                and "per" not in str(metric.get("alias", "")).lower()):
+            metric = dict(metric, expression=dict(ORDER_COUNT))
+            changed = True
+        metrics.append(metric)
+    return (dict(plan, metrics=metrics), True) if changed else (plan, False)
+
+
 def _dedupe_metrics(plan):
     """After a merge, "Sales 2025" and "Sales 2026" are the same metric."""
 
@@ -271,6 +298,9 @@ def normalize_plan(plan):
     ``(plan, notes)``; the plan is re-validated by the caller."""
 
     notes = []
+    plan, recounted = _count_orders(plan)
+    if recounted:
+        notes.append("orders are counted as distinct order IDs")
     plan, split = _split_year_month(plan)
     plan, merged = merge_repeated_filters(plan)
     if merged:

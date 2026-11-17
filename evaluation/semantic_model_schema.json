@@ -290,6 +290,14 @@
         {
           "Name": "Sales Target",
           "Type": "Double"
+        },
+        {
+          "Name": "Cost",
+          "Type": "Double"
+        },
+        {
+          "Name": "Quantity",
+          "Type": "Integer"
         }
       ],
       "Columns": [
@@ -319,11 +327,6 @@
         },
         {
           "Name": "CustomerKey",
-          "Type": "Integer",
-          "FormatString": "0"
-        },
-        {
-          "Name": "Quantity",
           "Type": "Integer",
           "FormatString": "0"
         },
@@ -365,6 +368,10 @@
           "Name": "Total Orders",
           "Type": "Integer",
           "FormatString": "0"
+        },
+        {
+          "Name": "TotalQuantity",
+          "Type": "Integer"
         }
       ]
     },

@@ -169,3 +169,25 @@ def test_interpretation_can_be_switched_off():
                    chat_responses=[json.dumps({"faithful": True, "reason": ""})])
     agent.options["interpret_wording"] = False
     assert not agent.ask("Income by branch").startswith("_Read")
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("How many orders by channel?", "Number of distinct orders by channel?"),
+    ("Orders by region", "Number of distinct orders by region"),
+    ("Units per order by channel", "Units per order by channel"),
+])
+def test_order_counts_are_read_as_distinct_orders(question, expected):
+    assert interpret(question, TODAY)[0] == expected
+
+
+def test_metric_labelled_orders_is_recounted():
+    plan = _plan([], metrics=[{"alias": "Total Orders", "expression": {
+        "kind": "measure", "name": "Units Sold"}}],
+        group_by=[{"table": "FactSales", "column": "Channel"}])
+    fixed, notes = normalize_plan(plan)
+    assert fixed["metrics"][0]["expression"] == {
+        "kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+    assert notes
+    ratio = _plan([], metrics=[{"alias": "Units per Order", "expression": {
+        "kind": "measure", "name": "Units Sold"}}])
+    assert normalize_plan(ratio)[0] == ratio

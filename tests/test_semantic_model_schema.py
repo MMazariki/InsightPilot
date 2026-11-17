@@ -34,16 +34,33 @@ def test_snapshot_contains_no_identifiers():
         assert marker not in text
 
 
-@needs_live_probe
-def test_snapshot_matches_live_probe():
-    assert load_model() == load_live_schema(), (
-        "semantic_model_schema.json has drifted from fabric_iq_schema.json; "
-        "regenerate the snapshot and re-run the evaluation suites."
-    )
+# The snapshot was first taken from the Fabric IQ probe (fabric_iq_schema.json)
+# and compared with it here. Since 2026-11-17 it is kept in step with the
+# published dataset by scripts/sync_model_schema.py instead, so the probe
+# comparisons were removed.
 
 
-@needs_live_probe
-def test_adapter_prompt_schema_unchanged_from_v2():
-    from evaluation.ollama_adapter_v2 import load_schema as legacy_load_schema
+def test_sync_reports_and_applies_model_changes():
+    import importlib.util
 
-    assert adapter.load_schema() == legacy_load_schema()
+    spec = importlib.util.spec_from_file_location(
+        "sync_model_schema", ROOT / "scripts" / "sync_model_schema.py")
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+
+    schema = {"Tables": [{"Name": "FactSales",
+                          "Columns": [{"Name": "Quantity", "Type": "Integer"}],
+                          "Measures": [{"Name": "Net Sales", "Type": "Double"}]}],
+              "ActiveRelationships": []}
+    live_columns = [("FactSales", "TotalQuantity", "Integer")]
+    live_measures = [("FactSales", "Net Sales", "Double"),
+                     ("FactSales", "Cost", "Double"),
+                     ("FactSales", "Orders", "Integer")]
+    diff = sync.compare(schema, live_columns, live_measures, skip={"Orders"})
+    assert diff["new_columns"] == [("FactSales", "TotalQuantity", "Integer")]
+    assert diff["gone_columns"] == [("FactSales", "Quantity")]
+    assert diff["new_measures"] == [("FactSales", "Cost", "Double")]
+    table = sync.apply(schema, diff)["Tables"][0]
+    assert [c["Name"] for c in table["Columns"]] == ["TotalQuantity"]
+    assert [m["Name"] for m in table["Measures"]] == ["Net Sales", "Cost"]
+    assert sync._is_auto("LocalDateTable_77ea")

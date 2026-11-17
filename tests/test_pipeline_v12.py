@@ -44,7 +44,10 @@ def test_strict_calibration_on_seen_sets_is_locked():
             else:
                 answerable_flagged += flagged
     assert answerable_flagged == 0
-    assert unsupported_flagged == 33
+    # 33 when measured. 32 since the Cost measure was added to the model on
+    # 2026-11-17: "What is the average unit cost by product category?"
+    # (fresh_v8) now names a model measure.
+    assert unsupported_flagged == 32
 
 
 def test_gate_strict_flag_verifies_entity_only_question():
