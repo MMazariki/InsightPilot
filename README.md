@@ -71,11 +71,22 @@ After changing `frontend/src/index.ts`, rebuild with `npm run build` in
 
 The Power BI dataset is imported from CSV files in
 `L:\Downloads\Saudi_Retail_MVP_PowerBI_Dataset` (synthetic Saudi retail
-data). `scripts/extend_sales_data.py` appended generated 2026 data to them
-on 2026-11-16; the originals are in the sibling folder ending
-`_backup_2025_only`. Changes to the CSV files reach the app only after the
-dataset is refreshed: open the report's `.pbix` in Power BI Desktop, choose
-Refresh, then Publish to the same workspace.
+data, 1 Jan 2021 to 16 Nov 2026, 122,483 sales lines). 2025 is the data
+as delivered. `scripts/extend_sales_data.py` generated 2026 (on
+2026-11-16) and `scripts/add_history_years.py` generated 2021–2024 (on
+2026-11-17), with yearly growth, Ramadan and Eid on each year's dates,
+National Day and White Friday peaks, and delivery and wallet payments
+gaining share. Backups: the sibling folders ending `_backup_2025_only` and
+`_backup_before_history`. Changes to the CSV files reach the app only after
+the dataset is refreshed: open the report's `.pbix` in Power BI Desktop,
+choose Refresh, then Publish to the same workspace.
+
+**New measures.** After adding or renaming measures or columns in Power BI
+Desktop and publishing, run
+`.venv\Scripts\python.exe scripts\sync_model_schema.py` to see the
+differences and add `--write` to make them available to questions (then
+restart the app). Check what a new measure computes first; `--skip "Name"`
+keeps one out.
 
 ## Admin settings
 
