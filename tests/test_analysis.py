@@ -24,10 +24,10 @@ CHANNEL = {"table": "FactSales", "column": "Channel"}
 
 
 @pytest.mark.parametrize("question,cleaned,kind", [
-    ("Which store grew the most between 2021 and 2026?", "Net sales by store?", "growth"),
+    ("Which store grew the most between 2021 and 2026?", "Net sales by store", "growth"),
     ("Net sales growth year over year", "Net sales", "growth"),
     ("How did units sold change between 2023 and 2026 by category?",
-     "Units sold by category?", "growth"),
+     "Units sold by category", "growth"),
     ("Delivery share of net sales by year", "Net sales by year", "share"),
     ("Share of net sales by channel", "Net sales by channel", "share"),
     ("Net sales in Ramadan 2024", "Net sales", "period"),
@@ -161,3 +161,15 @@ def test_agent_answers_a_growth_question_end_to_end():
     assert "'DimDate'[Year] >= 2021" in powerbi.queries[0]
     assert "| A | 100.00 | 130.00 | 30.00 | 30.0% |" in answer
     assert "analysis" in agent.last_trace["stages"]
+
+
+@pytest.mark.parametrize("question,blocked", [
+    ("Which store grew the most between 2021 and 2026? Growth ranking with "
+     "change and change % for each store", False),
+    ("Show the change in sales by store", False),
+    ("Change the Q4 sales target to 5 million.", True),
+    ("Please change store 3 name to X", True),
+])
+def test_request_guard_reads_change_as_a_noun(question, blocked):
+    from evaluation.request_guard import screen_request
+    assert bool(screen_request(question)) is blocked

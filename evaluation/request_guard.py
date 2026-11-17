@@ -38,6 +38,11 @@ WRITE_PATTERN = re.compile(
     + r"(?P<verb>" + "|".join(WRITE_VERBS) + r")\b"
     # "add up" / "sum up" style aggregation phrasing is analytical.
     + r"(?!\s+up\b)"
+    # So is a verb used as a noun: "change %", "change in sales", "drop
+    # from 2024", "change and growth" (added 2026-11-17).
+    + r"(?!\s*%)"
+    + r"(?!\s+(?:percent|percentage|in|of|from|between|over|vs|versus|rate|"
+    + r"and|or|per)\b)"
     + r"(?:\W+[\w'&-]+){0,5}?\W+"
     + r"(?P<object>" + "|".join(DATA_OBJECTS) + r")\b",
     re.IGNORECASE,

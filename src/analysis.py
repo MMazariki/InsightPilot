@@ -118,6 +118,65 @@ def _named_value(question):
     return None
 
 
+# Breakdown words, in the order they are looked for, and the planner wording.
+_BREAKDOWNS = [
+    (r"store types?", "store type"), (r"stores?|branch(?:es)?|shops?", "store"),
+    (r"regions?", "region"), (r"cit(?:y|ies)", "city"),
+    (r"subcategor(?:y|ies)", "subcategory"), (r"categor(?:y|ies)", "category"),
+    (r"brands?", "brand"), (r"products?", "product"),
+    (r"(?:sales )?channels?", "channel"), (r"payment methods?", "payment method"),
+    (r"customer segments?|segments?", "customer segment"),
+    (r"genders?", "gender"), (r"age bands?", "age band"),
+    (r"quarters?", "quarter"), (r"months?", "month"), (r"years?", "year"),
+]
+
+
+def _rebuild(text, spec):
+    """For growth and share, the rest of the question can describe the
+    answer's layout ("ranking with change % for each store"), which is not
+    for the planner. Keep only the measure, the breakdowns and any named
+    values: "<measure> by <breakdowns> for <values>"."""
+
+    from evaluation.query_plan_validator import load_model
+
+    lower = text.lower()
+    measures = sorted((m["Name"] for t in load_model()["Tables"]
+                       for m in t.get("Measures", [])), key=len, reverse=True)
+    metric = next((m for m in measures
+                   if re.search(rf"\b{re.escape(m.lower())}", lower)), None)
+    if metric is None:
+        for words, name in [(r"orders?", "number of distinct orders"),
+                            (r"units?", "units sold"), (r"profit", "gross profit"),
+                            (r"discounts?", "total discounts"),
+                            (r"margin", "gross margin %")]:
+            if re.search(rf"\b{words}\b", lower):
+                metric = name
+                break
+    if metric is None and "number of distinct orders" in lower:
+        metric = "number of distinct orders"
+    metric = (metric or "net sales").lower()
+
+    groups = []
+    for words, name in _BREAKDOWNS:
+        if re.search(rf"\b(?:{words})\b", lower) and name not in groups \
+                and not (name == "year" and spec.get("growth")):
+            groups.append(name)
+            lower = re.sub(rf"\b(?:{words})\b", " ", lower)
+    values = []
+    catalog = load_catalog()
+    for table, column in SHARE_COLUMNS:
+        for value in catalog.get(f"{table}[{column}]", []):
+            if re.search(rf"(?<![\w&]){re.escape(value)}(?![\w&])", text, re.I) \
+                    and value not in values:
+                values.append(value)
+    question = metric[0].upper() + metric[1:]
+    if groups:
+        question += " by " + " and ".join(groups)
+    if values:
+        question += " for " + " and ".join(values)
+    return question
+
+
 def _tidy(text):
     text = re.sub(r"\s+", " ", text).strip(" ,;:")
     text = re.sub(r"\s+([.?!,])", r"\1", text)
@@ -211,8 +270,12 @@ def detect(question, today=None):
     from evaluation.answerability import names_a_metric
 
     cleaned = _tidy(text)
-    if not names_a_metric(cleaned, strict=True):
+    named = names_a_metric(cleaned, strict=True)
+    if spec.get("growth") or spec.get("share"):
+        cleaned = _rebuild(cleaned, spec)
+    elif not named:
         cleaned = _tidy("net sales " + cleaned[:1].lower() + cleaned[1:])
+    if not named:
         notes.append("no measure named, so net sales")
     return cleaned, spec, notes
 
