@@ -174,16 +174,27 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
   ): Promise<string> => {
     // The answer's chart fills the whole page: (0, 0) at the page's size.
     // This changes only the embedded view, never the saved report.
-    const pageSize = {
-      width: page.defaultSize?.width ?? 1280,
-      height: page.defaultSize?.height ?? 720,
+    // A missing or zero page size falls back to 1920 x 1080 (the AI Canvas
+    // page as saved).
+    const savedWidth = page.defaultSize?.width ?? 0;
+    const savedHeight = page.defaultSize?.height ?? 0;
+    const pageSize: { width: number; height: number } = {
+      width: savedWidth > 0 ? savedWidth : 1920,
+      height: savedHeight > 0 ? savedHeight : 1080,
     };
     const fullPage: models.IVisualLayout = {
       x: 0,
       y: 0,
+      z: 1,
       width: pageSize.width,
       height: pageSize.height,
+      displayState: { mode: models.VisualContainerDisplayMode.Visible },
     };
+    console.log("AGENTIC PAGE SIZE:", {
+      page: page.displayName,
+      defaultSize: page.defaultSize,
+      used: pageSize,
+    });
     const response = await page.createVisual(request.visualType, fullPage);
     const visual = response.visual;
 
@@ -242,11 +253,23 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
     // Some visual types ignore the creation layout: move and resize again,
     // then log what the page reports.
     try {
-      await page.moveVisual(visual.name, 0, 0);
-      await page.resizeVisual(visual.name, pageSize.width, pageSize.height);
-      const placed = (await page.getVisuals()).find(
+      let placed = (await page.getVisuals()).find(
         (item) => item.name === visual.name,
       );
+      const layout = placed?.layout;
+      const off =
+        !layout ||
+        (layout.x ?? 0) !== 0 ||
+        (layout.y ?? 0) !== 0 ||
+        (layout.width ?? 0) < pageSize.width - 1 ||
+        (layout.height ?? 0) < pageSize.height - 1;
+      if (off) {
+        await page.moveVisual(visual.name, 0, 0);
+        await page.resizeVisual(visual.name, pageSize.width, pageSize.height);
+        placed = (await page.getVisuals()).find(
+          (item) => item.name === visual.name,
+        );
+      }
       console.log("AGENTIC VISUAL LAYOUT:", {
         visual: visual.name,
         visualType: request.visualType,
@@ -475,11 +498,11 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
         permissions: models.Permissions.ReadWrite,
         viewMode: models.ViewMode.Edit,
         settings: {
-          // Scale the page to fit the panel (embedded view only).
-          layoutType: models.LayoutType.Custom,
-          customLayout: {
-            displayOption: models.DisplayOption.FitToPage,
-          },
+          // The AI Canvas page is saved with "Fit to page", which the
+          // normal (Master) layout honours. A Custom layout is not used: it
+          // can override where authored visuals are placed and whether they
+          // show (2026-11-17: the answer's visual did not appear with it).
+          layoutType: models.LayoutType.Master,
           // Filters, Visualizations and Data start collapsed so the chart
           // gets the room; each can still be opened from its edge tab.
           panes: {
@@ -495,8 +518,6 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
 
       console.log("AGENTIC EMBED LAYOUT:", {
         layoutType: config.settings?.layoutType,
-        displayOption: (config.settings as any)?.customLayout?.displayOption,
-        fitToPage: models.DisplayOption.FitToPage,
         panes: config.settings?.panes,
       });
 
