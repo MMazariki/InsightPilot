@@ -240,6 +240,114 @@ def _test_button(label, block, api_key, key):
         (st.success if ok else st.error)(message)
 
 
+def _actions_tab(a, secrets):
+    """Admin -> Actions. Returns ``(actions_block, new_webhook, remove_webhook)``."""
+
+    st.caption(
+        "Let the assistant email an answer, post it to Teams, create To Do tasks "
+        "or export it. Every action is drafted on a card and runs only after you "
+        "click Approve. Details: docs/AGENT_ACTIONS_PLAN.md.")
+    enabled = st.checkbox("Enable actions", value=a["enabled"], key=_key("act_enabled"),
+                          help="Off by default. When off, action requests in the chat "
+                               "are answered with a short explanation.")
+    labels = {"email": "Email (Microsoft Graph, sent as you)",
+              "teams_post": "Teams channel post (Workflows webhook)",
+              "task": "Microsoft To Do tasks", "export": "Export to Excel / CSV"}
+    columns = st.columns(2)
+    kinds = {}
+    for index, kind in enumerate(app_settings.ACTION_KINDS):
+        kinds[kind] = columns[index % 2].checkbox(
+            labels[kind], value=a["kinds"][kind], key=_key(f"act_kind_{kind}"))
+
+    st.subheader("Address book", divider="gray")
+    st.caption("Email goes only to these people, to addresses on the allowed "
+               "domains, or to you. Aliases are other ways you refer to someone "
+               "(comma-separated), e.g. *western manager, west*.")
+    rows = [{"name": e["name"], "email": e["email"], "role": e["role"],
+             "aliases": ", ".join(e["aliases"])} for e in a["address_book"]]
+    edited = st.data_editor(
+        rows or [{"name": "", "email": "", "role": "", "aliases": ""}],
+        num_rows="dynamic", use_container_width=True, key=_key("act_book"),
+        column_config={
+            "name": st.column_config.TextColumn("Name"),
+            "email": st.column_config.TextColumn("Email"),
+            "role": st.column_config.TextColumn("Role"),
+            "aliases": st.column_config.TextColumn("Aliases")})
+    book = [dict(row) for row in edited if any(str(v or "").strip() for v in row.values())]
+    domains = st.text_area(
+        "Allowed email domains (one per line)", value="\n".join(a["allowed_domains"]),
+        height=68, key=_key("act_domains"), placeholder="company.com")
+
+    st.subheader("Teams", divider="gray")
+    st.caption("In the Teams channel: ⋯ → Workflows → *Post to a channel when a "
+               "webhook request is received* → copy the address here. It is stored "
+               "encrypted, like the API keys.")
+    channel = st.text_input("Channel name (shown on the card)",
+                            value=a["teams_channel_label"], key=_key("act_channel"))
+    saved_url = secrets.get("teams_webhook_url", "")
+    webhook = st.text_input(
+        "Webhook address", type="password", key=_key("act_webhook"),
+        placeholder=(f"Saved ({saved_url[:30]}…) — type to replace" if saved_url
+                     else "https://….logic.azure.com/workflows/…"))
+    remove = False
+    if saved_url:
+        remove = st.checkbox("Remove the saved webhook address", key=_key("act_webhook_rm"))
+
+    st.subheader("Limits and options", divider="gray")
+    left, middle, right = st.columns(3)
+    caps = {
+        "email": left.number_input("Emails per day", 0, 1000, a["daily_caps"]["email"],
+                                   key=_key("act_cap_email")),
+        "teams_post": middle.number_input("Teams posts per day", 0, 1000,
+                                          a["daily_caps"]["teams_post"],
+                                          key=_key("act_cap_teams")),
+        "task": right.number_input("Tasks per day", 0, 1000, a["daily_caps"]["task"],
+                                   key=_key("act_cap_task")),
+    }
+    max_recipients = left.number_input("Recipients per email", 1, 50, a["max_recipients"],
+                                       key=_key("act_max_to"))
+    expiry = middle.number_input("Draft expires after (minutes)", 1, 240,
+                                 a["draft_expiry_minutes"], key=_key("act_expiry"))
+    todo = right.text_input("To Do list name", value=a["todo_list_name"],
+                            key=_key("act_todo"))
+    export = left.text_input("Export folder", value=a["export_folder"],
+                             key=_key("act_export"), help="Relative to the project, "
+                             "or a full path.")
+    attach = middle.checkbox("Attach the table to emails", value=a["attach_xlsx"],
+                             key=_key("act_attach"))
+
+    st.subheader("Setup for email and To Do", divider="gray")
+    st.markdown(
+        "Azure portal → App registrations → the InsightPilot app → API permissions → "
+        "Add a permission → Microsoft Graph → Delegated → `Mail.Send` and "
+        "`Tasks.ReadWrite` → **Grant admin consent**. The first email or task then "
+        "opens one Microsoft sign-in window to accept the new permission.")
+
+    st.subheader("History", divider="gray")
+    from src.actions import audit
+
+    history = audit.entries(limit=200)
+    if history:
+        st.dataframe(
+            [{"Time": e["time"].replace("T", " "), "Event": e["event"], "Kind": e["kind"],
+              "Recipients": ", ".join(e.get("recipients", [])),
+              "Subject": e.get("subject", ""), "Detail": e.get("detail", "")
+              or "; ".join(e.get("problems", []))} for e in reversed(history)],
+            hide_index=True, use_container_width=True, height=260)
+        st.caption(f"From `{audit.LOG}` (newest first).")
+    else:
+        st.caption("No actions yet.")
+
+    block = {
+        "enabled": enabled, "kinds": kinds, "address_book": book,
+        "allowed_domains": [d for d in domains.splitlines() if d.strip()],
+        "max_recipients": max_recipients, "daily_caps": caps, "todo_list_name": todo,
+        "export_folder": export, "draft_expiry_minutes": expiry, "attach_xlsx": attach,
+        "teams_channel_label": channel,
+    }
+    return block, (webhook or "").strip(), remove
+
+
 def render(agent_mode_in_use, voice_installed):
     """Draw the Admin page. Returns True if settings were saved this run."""
 
@@ -264,7 +372,7 @@ def render(agent_mode_in_use, voice_installed):
         st.success(notice, icon=":material/check_circle:")
 
     tabs = st.tabs(["Models", "Answer checks", "Power BI", "Interface",
-                    "Voice", "Documents", "About"])
+                    "Voice", "Documents", "Actions", "About"])
 
     # ---------------------------------------------------------- Models
     with tabs[0]:
@@ -641,8 +749,12 @@ def render(agent_mode_in_use, voice_installed):
                 "Read aloud speed", 0.5, 2.0, float(d["read_aloud_rate"]),
                 step=0.1, key=_key("doc_rate"))
 
-    # ----------------------------------------------------------- About
+    # --------------------------------------------------------- Actions
     with tabs[6]:
+        actions, webhook_new, webhook_remove = _actions_tab(saved["actions"], secrets)
+
+    # ----------------------------------------------------------- About
+    with tabs[7]:
         st.markdown(
             f"""
 * Settings file: `{app_settings.SETTINGS_FILE}`
@@ -715,9 +827,17 @@ def render(agent_mode_in_use, voice_installed):
             "show_downloads": doc_downloads,
             "read_aloud_rate": doc_rate,
         },
+        "actions": actions,
     }
     clean, errors = app_settings.validate(edited)
-    key_changes = bool(planner_key or planner_remove or verifier_key or verifier_remove)
+    if webhook_new:
+        from src.actions.executors import webhook_url_problem
+
+        problem = webhook_url_problem(webhook_new)
+        if problem:
+            errors.append("Actions: " + problem)
+    key_changes = bool(planner_key or planner_remove or verifier_key or verifier_remove
+                       or webhook_new or webhook_remove)
     changed = clean != saved or key_changes
 
     st.divider()
@@ -749,6 +869,10 @@ def render(agent_mode_in_use, voice_installed):
                 app_settings.save_secret("verifier_api_key", "")
             elif verifier_key:
                 app_settings.save_secret("verifier_api_key", verifier_key)
+            if webhook_remove:
+                app_settings.save_secret("teams_webhook_url", "")
+            elif webhook_new:
+                app_settings.save_secret("teams_webhook_url", webhook_new)
             _clear_widget_state()
             st.session_state.admin_notice = (
                 "Settings saved. They apply to the next question.")

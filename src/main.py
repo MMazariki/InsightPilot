@@ -8,7 +8,8 @@ import streamlit as st
 
 from powerbi_embed_component import powerbi_embed_component
 from src import voice
-from src import admin_page, agent_factory, report_pages
+from src import action_card, admin_page, agent_factory, report_pages
+from src.actions import detect as action_detect
 import powerbi_embed_component as report_component
 from src import settings as app_settings
 from src.visual_builder import chart_choices, with_chart_type
@@ -264,6 +265,10 @@ VOICE_ENABLED = voice.is_available()
 @st.cache_resource(show_spinner=False)
 def get_transcriber():
     return voice.Transcriber()
+
+
+action_card.init_state()
+
 if "view" not in st.session_state:
     requested_view = st.query_params.get("view")
     st.session_state.view = (requested_view if requested_view in
@@ -286,9 +291,12 @@ def queue_prompt(question):
 
 
 def reset_conversation():
+    action_card.supersede()
     st.session_state.messages = []
     st.session_state.visual_request = None
     st.session_state.visual_built = None
+    st.session_state.action_context = None
+    st.session_state.action_drafts = {}
 
 
 def change_chart_type():
@@ -330,6 +338,42 @@ def current_report_page(report_id, workspace_id):
 @st.cache_data(ttl=600, show_spinner=False)
 def current_query_account(configured):
     return report_pages.query_account(configured or None)
+
+
+def answer_question(question):
+    """Ask the agent, add its answer to the chat. True for a data answer."""
+
+    with st.spinner("Planning the query and reading Power BI..."):
+        try:
+            if st.session_state.agent is None:
+                st.session_state.agent = create_agent()
+
+            answer = st.session_state.agent.ask(question)
+            action_card.remember_answer(question, st.session_state.agent)
+            if st.session_state.agent.pending_visual_request:
+                st.session_state.visual_request = {
+                    **st.session_state.agent.pending_visual_request,
+                    "requestId": str(uuid.uuid4()),
+                }
+                # The chart as built; the type selector redraws it.
+                st.session_state.visual_built = dict(st.session_state.visual_request)
+                st.session_state.chart_type = "Auto"
+                print("[STREAMLIT] Visual request received:",
+                      st.session_state.visual_request)
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": answer,
+                "suggestions": list(getattr(
+                    st.session_state.agent, "suggestions", []) or []),
+            })
+        except Exception as exc:
+            st.session_state.action_context = None
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"**Error:** {exc}",
+            })
+    return bool(st.session_state.action_context)
 
 
 def render_answer(content):
@@ -595,6 +639,10 @@ with chat_column, st.container(border=True, key="chat_card"):
         prompt = st.session_state.queued_prompt
         st.session_state.queued_prompt = None
 
+    # The signed-in account: "email this to me" goes there.
+    ACTION_SELF = action_card.self_address_for(
+        SETTINGS, current_query_account(SETTINGS["powerbi"]["username"]))
+
     with chat_container:
 
         if not st.session_state.messages and not prompt:
@@ -630,6 +678,9 @@ with chat_column, st.container(border=True, key="chat_card"):
             else:
                 with st.chat_message("assistant", avatar=":material/explore:"):
                     render_answer(message["content"])
+                    draft = st.session_state.action_drafts.get(message.get("action_id"))
+                    if draft:
+                        action_card.render(draft, SETTINGS, ACTION_SELF)
                     # Suggested rephrasings of a declined question, as
                     # buttons on the latest answer only.
                     if index == last_index and message.get("suggestions"):
@@ -649,47 +700,30 @@ with chat_column, st.container(border=True, key="chat_card"):
             "content": prompt,
         })
 
+        # "Email this to ...", "export net sales by region": an action
+        # request, possibly with a data question inside (answered first).
+        action_request = action_detect.parse(prompt)
+        question = prompt if action_request is None else action_request["question"]
+        answered = False
+
         with chat_container:
             with st.chat_message("user", avatar=":material/person:"):
                 st.markdown(prompt)
 
             with st.chat_message("assistant", avatar=":material/explore:"):
-                with st.spinner("Planning the query and reading Power BI..."):
-
-                    try:
-
-                        if st.session_state.agent is None:
-                            st.session_state.agent = create_agent()
-
-                        answer = st.session_state.agent.ask(prompt)
-                        if st.session_state.agent.pending_visual_request:
-                            st.session_state.visual_request = {
-                                **st.session_state.agent.pending_visual_request,
-                                "requestId": str(uuid.uuid4()),
-                            }
-                            # The chart as built; the type selector redraws it.
-                            st.session_state.visual_built = dict(
-                                st.session_state.visual_request)
-                            st.session_state.chart_type = "Auto"
-
-                            print(
-                                "[STREAMLIT] Visual request received:",
-                                st.session_state.visual_request
-                            )
-
+                if question:
+                    answered = answer_question(question)
+                if action_request is not None:
+                    if question and not answered:
                         st.session_state.messages.append({
                             "role": "assistant",
-                            "content": answer,
-                            "suggestions": list(getattr(
-                                st.session_state.agent, "suggestions", []) or []),
-                        })
-
-                    except Exception as exc:
-
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": f"**Error:** {exc}",
-                        })
+                            "content": "There is no data answer above to "
+                                       + action_card.service.KIND_LABELS[
+                                           action_request["kind"]].lower()
+                                       + ", so nothing was drafted."})
+                    else:
+                        st.session_state.messages.append(action_card.start(
+                            action_request, prompt, SETTINGS, ACTION_SELF))
 
         st.rerun()
 

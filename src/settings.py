@@ -18,6 +18,7 @@ This module has no Streamlit import so it can be unit-tested on its own.
 import copy
 import json
 import os
+import re
 from pathlib import Path
 
 from src.rag.answer import NOT_FOUND as DOC_NOT_FOUND
@@ -157,7 +158,25 @@ DEFAULTS = {
         "show_downloads": True,
         "read_aloud_rate": 1.0,
     },
+    # Actions on an answer (email, Teams, To Do, export), each one only after
+    # the user approves the exact draft: docs/AGENT_ACTIONS_PLAN.md.
+    "actions": {
+        "enabled": False,
+        "kinds": {"email": True, "teams_post": True, "task": True, "export": True},
+        # [{"name", "email", "role", "aliases": [..]}]
+        "address_book": [],
+        "allowed_domains": [],
+        "max_recipients": 10,
+        "daily_caps": {"email": 20, "teams_post": 20, "task": 50},
+        "todo_list_name": "InsightPilot",
+        "export_folder": "exports",
+        "draft_expiry_minutes": 15,
+        "attach_xlsx": True,
+        "teams_channel_label": "",
+    },
 }
+
+ACTION_KINDS = ("email", "teams_post", "task", "export")
 
 # Settings that change how the index is built: the Documents page asks for a
 # rebuild when they differ from the ones the index was built with.
@@ -190,9 +209,14 @@ LIMITS = {
     "min_page_chars": (0, 1000),
     "header_share": (0.1, 1.0),
     "read_aloud_rate": (0.5, 2.0),
+    "max_recipients": (1, 50),
+    "daily_cap": (0, 1000),
+    "draft_expiry_minutes": (1, 240),
 }
 
-SECRET_NAMES = ("planner_api_key", "verifier_api_key")
+SECRET_NAMES = ("planner_api_key", "verifier_api_key", "teams_webhook_url")
+
+_EMAIL = re.compile(r"^[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 def defaults():
@@ -399,16 +423,95 @@ def validate(raw):
         errors.append("Documents: the overlap must be smaller than the passage size.")
         clean["documents"]["overlap_chars"] = base["overlap_chars"]
 
+    clean["actions"] = _clean_actions(raw.get("actions"), errors)
     return clean, errors
+
+
+def clean_domain(value):
+    """``@Company.com`` / ``company.com`` -> ``company.com``; "" if invalid."""
+
+    value = _text(value).lower().lstrip("@")
+    return value if re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", value) else ""
+
+
+def _clean_actions(raw, errors):
+    raw = raw if isinstance(raw, dict) else {}
+    base = DEFAULTS["actions"]
+    clean = copy.deepcopy(base)
+    clean["enabled"] = bool(raw.get("enabled", base["enabled"]))
+    kinds = raw.get("kinds") if isinstance(raw.get("kinds"), dict) else {}
+    clean["kinds"] = {k: bool(kinds.get(k, base["kinds"][k])) for k in ACTION_KINDS}
+    clean["attach_xlsx"] = bool(raw.get("attach_xlsx", base["attach_xlsx"]))
+    for name in ("todo_list_name", "export_folder"):
+        clean[name] = _text(raw.get(name, base[name])) or base[name]
+    clean["teams_channel_label"] = _text(raw.get("teams_channel_label", ""))
+
+    domains = raw.get("allowed_domains", [])
+    domains = domains if isinstance(domains, list) else []
+    clean["allowed_domains"] = []
+    for domain in domains:
+        if not _text(domain):
+            continue
+        cleaned = clean_domain(domain)
+        if cleaned:
+            if cleaned not in clean["allowed_domains"]:
+                clean["allowed_domains"].append(cleaned)
+        else:
+            errors.append(f"Actions: {domain!r} is not an email domain "
+                          "(example: company.com).")
+
+    book = raw.get("address_book", [])
+    book = book if isinstance(book, list) else []
+    clean["address_book"] = []
+    seen = set()
+    for entry in book:
+        if not isinstance(entry, dict):
+            continue
+        name = _text(entry.get("name"))
+        email = _text(entry.get("email")).lower()
+        role = _text(entry.get("role"))
+        aliases = entry.get("aliases", [])
+        if isinstance(aliases, str):
+            aliases = aliases.split(",")
+        aliases = [a.strip() for a in aliases if isinstance(a, str) and a.strip()]
+        if not (name or email):
+            continue
+        if not name or not _EMAIL.match(email):
+            errors.append(f"Actions: address book entry {name or email!r} needs "
+                          "a name and a valid email address.")
+            continue
+        if email in seen:
+            errors.append(f"Actions: {email} is in the address book twice.")
+            continue
+        seen.add(email)
+        clean["address_book"].append(
+            {"name": name, "email": email, "role": role, "aliases": aliases})
+
+    limits = (("max_recipients", "max_recipients", "Recipients per email"),
+              ("draft_expiry_minutes", "draft_expiry_minutes", "Draft expiry"))
+    for name, limit, label in limits:
+        value = _number(raw.get(name, base[name]), limit, int, False, errors,
+                        f"Actions: {label}")
+        clean[name] = base[name] if value is None else value
+    caps = raw.get("daily_caps") if isinstance(raw.get("daily_caps"), dict) else {}
+    for kind, default in base["daily_caps"].items():
+        value = _number(caps.get(kind, default), "daily_cap", int, False, errors,
+                        f"Actions: daily limit for {kind}")
+        clean["daily_caps"][kind] = default if value is None else value
+    return clean
+
+
+# Settings that are not part of the measured Power BI assistant.
+UNMEASURED_BLOCKS = ("documents", "actions")
 
 
 def is_default(settings):
     """True when the Power BI assistant runs as measured. The Documents
-    page settings are not part of that measurement."""
+    page and action settings are not part of that measurement."""
 
     clean = validate(settings)[0]
-    return ({k: v for k, v in clean.items() if k != "documents"}
-            == {k: v for k, v in DEFAULTS.items() if k != "documents"})
+    return ({k: v for k, v in clean.items() if k not in UNMEASURED_BLOCKS}
+            == {k: v for k, v in DEFAULTS.items() if k not in UNMEASURED_BLOCKS})
 
 
 def effective_verifier(settings):

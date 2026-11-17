@@ -65,3 +65,6 @@ models/
 documents/*
 !documents/README.md
 rag_index/
+
+# Action exports (answer tables saved as Excel/CSV)
+exports/
