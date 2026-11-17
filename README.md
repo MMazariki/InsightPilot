@@ -150,6 +150,7 @@ is needed.
 | **Power BI** | Dataset, workspace, sign-in account, the report and page shown on the right, timeout. |
 | **Interface** | Starter questions, chat panel height, whether the query plan and DAX are shown, whether a chart of each answer is added to the Power BI report. |
 | **Voice** | Auto-send and speech model (used once voice input is installed). |
+| **Documents** | Everything on the Documents page: PDF folder and subfolders; search and answer models and Ollama address; answer temperature, context window, keep-loaded time, timeout, the answer instructions (system prompt) and the not-found reply; passages per answer, candidates, minimum relevance, keyword search, fusion constant; follow-up memory; passage size and overlap, minimum text per page, header/footer detection, embedding batch and timeout, indexing on page open; example questions, passages and PDF buttons under answers, read aloud and its speed. Settings that change the index rebuild it automatically. |
 
 Things to know:
 

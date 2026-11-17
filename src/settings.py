@@ -20,6 +20,9 @@ import json
 import os
 from pathlib import Path
 
+from src.rag.answer import NOT_FOUND as DOC_NOT_FOUND
+from src.rag.answer import SYSTEM_TEMPLATE as DOC_SYSTEM_PROMPT
+
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT / "config"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
@@ -127,8 +130,39 @@ DEFAULTS = {
         "min_score": 0.3,
         "show_excerpts": True,
         "read_aloud": True,
+        # Answer model
+        "answer_temperature": 0.0,
+        "answer_num_ctx": 8192,
+        "answer_keep_alive": "5m",
+        "system_prompt": DOC_SYSTEM_PROMPT,
+        "not_found_text": DOC_NOT_FOUND,
+        # Search
+        "candidates": 20,
+        "keyword_search": True,
+        "fusion_k": 60,
+        # Follow-up questions
+        "history_exchanges": 2,
+        "followup_words": 8,
+        # Indexing (changing these needs a rebuild)
+        "embed_batch": 32,
+        "embed_timeout": 120,
+        "auto_index": True,
+        "min_page_chars": 20,
+        "header_share": 0.6,
+        # Page
+        "example_questions": [
+            "What does the policy say about refunds?",
+            "Summarise the main findings.",
+        ],
+        "show_downloads": True,
+        "read_aloud_rate": 1.0,
     },
 }
+
+# Settings that change how the index is built: the Documents page asks for a
+# rebuild when they differ from the ones the index was built with.
+DOC_INDEX_SETTINGS = ("embedding_model", "chunk_chars", "overlap_chars",
+                      "min_page_chars", "header_share")
 
 # (minimum, maximum) for numeric settings; None in the data means "not set".
 LIMITS = {
@@ -145,6 +179,17 @@ LIMITS = {
     "overlap_chars": (0, 1000),
     "top_k": (1, 20),
     "min_score": (0.0, 1.0),
+    "answer_temperature": (0.0, 2.0),
+    "answer_num_ctx": (1024, 131072),
+    "candidates": (1, 200),
+    "fusion_k": (1, 1000),
+    "history_exchanges": (0, 10),
+    "followup_words": (0, 50),
+    "embed_batch": (1, 512),
+    "embed_timeout": (5, 3600),
+    "min_page_chars": (0, 1000),
+    "header_share": (0.1, 1.0),
+    "read_aloud_rate": (0.5, 2.0),
 }
 
 SECRET_NAMES = ("planner_api_key", "verifier_api_key")
@@ -309,13 +354,43 @@ def validate(raw):
     base = DEFAULTS["documents"]
     for name in ("folder", "ollama_url", "embedding_model", "answer_model"):
         clean["documents"][name] = _text(docs.get(name, base[name])) or base[name]
-    for name in ("recursive", "show_excerpts", "read_aloud"):
+    for name in ("recursive", "show_excerpts", "read_aloud", "keyword_search",
+                 "auto_index", "show_downloads"):
         clean["documents"][name] = bool(docs.get(name, base[name]))
+    clean["documents"]["answer_keep_alive"] = _text(
+        docs.get("answer_keep_alive", base["answer_keep_alive"]))
+    prompt = docs.get("system_prompt", base["system_prompt"])
+    prompt = prompt.strip() if isinstance(prompt, str) else ""
+    if not prompt:
+        prompt = base["system_prompt"]
+    elif "{not_found}" not in prompt:
+        errors.append("Documents: the answer instructions must contain "
+                      "{not_found}, where the not-found reply goes.")
+        prompt = base["system_prompt"]
+    clean["documents"]["system_prompt"] = prompt
+    clean["documents"]["not_found_text"] = (
+        _text(docs.get("not_found_text", base["not_found_text"]))
+        or base["not_found_text"])
+    examples = docs.get("example_questions", base["example_questions"])
+    if isinstance(examples, list):
+        clean["documents"]["example_questions"] = [
+            q.strip() for q in examples if isinstance(q, str) and q.strip()][:6]
     labels = {"answer_timeout": ("Answer timeout", int),
               "chunk_chars": ("Passage size", int),
               "overlap_chars": ("Passage overlap", int),
               "top_k": ("Passages per answer", int),
-              "min_score": ("Minimum relevance", float)}
+              "min_score": ("Minimum relevance", float),
+              "answer_temperature": ("Answer temperature", float),
+              "answer_num_ctx": ("Answer context window", int),
+              "candidates": ("Search candidates", int),
+              "fusion_k": ("Fusion constant", int),
+              "history_exchanges": ("Follow-up memory", int),
+              "followup_words": ("Short follow-up length", int),
+              "embed_batch": ("Embedding batch size", int),
+              "embed_timeout": ("Embedding timeout", int),
+              "min_page_chars": ("Minimum text per page", int),
+              "header_share": ("Header/footer share", float),
+              "read_aloud_rate": ("Read aloud speed", float)}
     for name, (label, kind) in labels.items():
         value = _number(docs.get(name, base[name]), name, kind, False, errors,
                         f"Documents: {label}")

@@ -90,16 +90,40 @@ class _Lock:
             pass
 
 
-def index_folder(folder, index_dir, embedder, chunk_chars=1000, overlap_chars=150,
-                 recursive=True, rebuild=False, progress=None):
-    """Bring the index up to date. ``progress(message, done, total)`` is
-    called as files are processed. Returns ``(store, summary)``."""
+def index_settings(embedding_model, chunk_chars=1000, overlap_chars=150,
+                   min_page_chars=20, header_share=0.6):
+    """The settings an index depends on; recorded in the manifest."""
+    return {"embedding_model": embedding_model, "chunk_chars": chunk_chars,
+            "overlap_chars": overlap_chars, "min_page_chars": min_page_chars,
+            "header_share": header_share}
 
+
+def needs_rebuild(store, settings):
+    """True when the index was built with different settings (an empty
+    index never needs one)."""
+    if not store.manifest.get("files"):
+        return False
+    built = store.manifest.get("index_settings")
+    if built is None:  # index from before settings were recorded
+        return not store.matches_model(settings["embedding_model"])
+    return built != settings
+
+
+def index_folder(folder, index_dir, embedder, chunk_chars=1000, overlap_chars=150,
+                 recursive=True, rebuild=False, progress=None, min_page_chars=20,
+                 header_share=0.6):
+    """Bring the index up to date. ``progress(message, done, total)`` is
+    called as files are processed. Returns ``(store, summary)``. A change
+    in any setting the index depends on rebuilds it."""
+
+    settings = index_settings(embedder.model, chunk_chars, overlap_chars,
+                              min_page_chars, header_share)
     with _Lock(index_dir):
         store = Store(index_dir).load()
-        if rebuild or not store.matches_model(embedder.model):
+        if rebuild or needs_rebuild(store, settings):
             store.reset(embedder.model)
         store.manifest["embedding_model"] = embedder.model
+        store.manifest["index_settings"] = settings
         store.manifest["folder"] = str(folder)
 
         files = scan(folder, recursive)
@@ -123,7 +147,8 @@ def index_folder(folder, index_dir, embedder, chunk_chars=1000, overlap_chars=15
             try:
                 digest = sha256(info.path)
                 entry["sha256"] = digest
-                pages, page_count = extract_pages(info.path)
+                pages, page_count = extract_pages(info.path, min_page_chars,
+                                                  header_share)
                 entry["pages"] = page_count
                 chunks = chunk_pages(pages, key, digest, chunk_chars, overlap_chars)
 

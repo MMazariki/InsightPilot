@@ -52,7 +52,8 @@ class Retriever:
         self.embedder = embedder
         self.bm25 = BM25([c["text"] for c in store.chunks])
 
-    def search(self, question, top_k=6, min_score=0.30, files=None, candidates=20):
+    def search(self, question, top_k=6, min_score=0.30, files=None, candidates=20,
+               keyword=True, fusion_k=60):
         """Return ``(hits, best_vector_score)``. Each hit is the chunk record
         plus ``score`` (vector) and ``rank``. ``hits`` is empty when nothing
         is relevant enough."""
@@ -67,11 +68,12 @@ class Retriever:
 
         vector_scores = self.store.vectors @ self.embedder.embed_query(question)
         vector_scores = np.where(allowed, vector_scores, -1.0)
-        keyword_scores = np.where(allowed, self.bm25.scores(question), 0.0)
-
         by_vector = [i for i in np.argsort(-vector_scores)[:candidates] if allowed[i]]
-        by_keyword = [i for i in np.argsort(-keyword_scores)[:candidates]
-                      if keyword_scores[i] > 0]
+        by_keyword = []
+        if keyword:
+            keyword_scores = np.where(allowed, self.bm25.scores(question), 0.0)
+            by_keyword = [i for i in np.argsort(-keyword_scores)[:candidates]
+                          if keyword_scores[i] > 0]
         best = float(vector_scores[by_vector[0]]) if by_vector else 0.0
         if best < min_score and not by_keyword:
             return [], best
@@ -79,7 +81,7 @@ class Retriever:
         fused = Counter()
         for ranking in (by_vector, by_keyword):
             for rank, index in enumerate(ranking):
-                fused[int(index)] += 1.0 / (60 + rank + 1)
+                fused[int(index)] += 1.0 / (fusion_k + rank + 1)
         hits = []
         for rank, (index, _) in enumerate(fused.most_common(top_k), start=1):
             hit = dict(chunks[index])

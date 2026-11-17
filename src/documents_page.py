@@ -51,7 +51,8 @@ def _pages(source):
     return f"pp. {source['page_start']}-{source['page_end']}"
 
 
-def _render_answer(message, folder, show_excerpts, index, read_aloud=True):
+def _render_answer(message, folder, show_excerpts, index, read_aloud=True,
+                   show_downloads=True, read_aloud_rate=1.0):
     if not message.get("found", True):
         st.info(message["content"], icon=":material/search_off:")
         return
@@ -59,7 +60,7 @@ def _render_answer(message, folder, show_excerpts, index, read_aloud=True):
     if read_aloud and not message["content"].startswith("**Error:**"):
         from src.read_aloud import read_aloud_button
 
-        read_aloud_button(message["content"], f"doc-answer-{index}")
+        read_aloud_button(message["content"], f"doc-answer-{index}", read_aloud_rate)
     if not message.get("cited", True):
         st.caption(":material/warning: This answer is not linked to a source; "
                    "check it against the documents.")
@@ -77,6 +78,8 @@ def _render_answer(message, folder, show_excerpts, index, read_aloud=True):
                 st.html('<div style="font-size:.85rem;color:#667085;'
                         'white-space:pre-wrap;line-height:1.45">'
                         + html.escape(s["text"]) + "</div>")
+    if not show_downloads:
+        return
     files = sorted({s["file_key"] for s in sources})
     columns = st.columns(min(len(files), 3))
     for number, key in enumerate(files):
@@ -112,7 +115,9 @@ def _run_index(service, rebuild, slot):
 
 
 def render(settings):
-    config = settings["documents"]
+    from src.settings import DEFAULTS
+
+    config = {**DEFAULTS["documents"], **settings["documents"]}
     service = _service(config)
     folder = service.folder
     folder.mkdir(parents=True, exist_ok=True)
@@ -186,7 +191,11 @@ def render(settings):
         changes = len(work["new"]) + len(work["changed"]) + len(work["deleted"])
         progress_slot = st.empty()
         can_index = installed is not None and config["embedding_model"] not in missing
-        if changes:
+        if service.needs_rebuild():
+            st.warning("The search settings changed in Admin (model, passage "
+                       "size or text extraction): every PDF is indexed again.",
+                       icon=":material/autorenew:")
+        elif changes:
             st.caption(", ".join(f"{len(work[k])} {k}" for k in
                                  ("new", "changed", "deleted") if work[k])
                        + " file(s) since the last indexing.")
@@ -195,7 +204,8 @@ def render(settings):
                               disabled=not (changes and can_index),
                               icon=":material/sync:", use_container_width=True)
         # New or changed files are indexed automatically once per session.
-        auto = (changes and can_index and not st.session_state.get("doc_auto_done"))
+        auto = (changes and can_index and config["auto_index"]
+                and not st.session_state.get("doc_auto_done"))
         if index_now or auto:
             st.session_state.doc_auto_done = True
             _run_index(service, False, progress_slot)
@@ -239,9 +249,8 @@ def render(settings):
                                    format_func=lambda k: k.split("/", 1)[1],
                                    placeholder="All documents in this folder")
         with st.expander("Rebuild the whole index"):
-            st.caption("Reads every PDF in every folder again. Needed only after "
-                       "changing the embedding model or passage size in Admin "
-                       "settings.")
+            st.caption("Reads every PDF in every folder again. Changing the "
+                       "search settings in Admin triggers this by itself.")
             if st.button("Rebuild", key="doc_rebuild", disabled=not can_index):
                 _run_index(service, True, progress_slot)
 
@@ -252,9 +261,15 @@ def render(settings):
         with history:
             if not messages:
                 if folder_ready:
-                    st.html(f'<div class="ip-welcome"><h3>Ask about folder {folder_id}'
-                            '</h3><p>For example: <i>What does the policy say about '
-                            'refunds?</i> or <i>Summarise the main findings.</i></p></div>')
+                    st.html(f'<div class="ip-welcome"><h3>Ask about folder '
+                            f'{html.escape(folder_id)}</h3>'
+                            + ('<p>Try one of these:</p>' if config["example_questions"]
+                               else '') + '</div>')
+                    for number, example in enumerate(config["example_questions"]):
+                        if st.button(example, key=f"doc_example_{number}",
+                                     use_container_width=True):
+                            st.session_state.doc_queued = example
+                            st.rerun()
                 else:
                     st.html('<div class="ip-welcome"><h3>Enter a folder number</h3>'
                             '<p>Questions are answered only from the PDFs of the '
@@ -267,12 +282,16 @@ def render(settings):
                 else:
                     with st.chat_message("assistant", avatar=":material/description:"):
                         _render_answer(message, folder, config["show_excerpts"],
-                                       f"{folder_id}-{index}", config["read_aloud"])
+                                       f"{folder_id}-{index}", config["read_aloud"],
+                                       config["show_downloads"], config["read_aloud_rate"])
 
         question = st.chat_input(
             f"Ask a question about folder {folder_id}..." if folder_ready
             else "Enter a folder number first", key="doc_chat_input",
             disabled=not folder_ready)
+        queued = st.session_state.pop("doc_queued", None)
+        if queued and not question:
+            question = queued
 
         if question and folder_ready:
             messages.append({"role": "user", "content": question})

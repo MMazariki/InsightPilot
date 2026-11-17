@@ -477,53 +477,169 @@ def render(agent_mode_in_use, voice_installed):
     with tabs[5]:
         st.caption("The Documents page answers questions from the PDFs in a "
                    "folder, using local Ollama models. PDF text never leaves "
-                   "this computer.")
+                   "this computer. Each numbered subfolder is searched "
+                   "separately and only when its number is entered.")
+
+        st.markdown("**Folder and models**")
         one, two = st.columns(2)
         with one:
             doc_folder = st.text_input(
                 "PDF folder", value=d["folder"], key=_key("doc_folder"),
-                help="An absolute path, or a folder inside the project. The "
-                     "default 'documents' is created in the project folder.")
-            doc_recursive = st.checkbox("Include subfolders", value=d["recursive"],
-                                        key=_key("doc_recursive"))
-            doc_embedding = st.text_input(
-                "Embedding model (Ollama)", value=d["embedding_model"],
-                key=_key("doc_embedding"),
-                help="Turns passages into vectors for search. Changing it needs "
-                     "Rebuild on the Documents page. English: nomic-embed-text; "
-                     "multilingual: bge-m3.")
-            doc_answer = st.text_input(
-                "Answer model (Ollama)", value=d["answer_model"],
-                key=_key("doc_answer"),
-                help="Writes the answer from the retrieved passages.")
+                help="An absolute path, or a folder inside the project. Put "
+                     "each group of PDFs in its own subfolder (for example "
+                     "102).")
+            doc_recursive = st.checkbox(
+                "Include subfolders inside each numbered folder",
+                value=d["recursive"], key=_key("doc_recursive"))
             doc_url = st.text_input("Ollama address", value=d["ollama_url"],
                                     key=_key("doc_url"))
         with two:
-            doc_top_k = st.number_input(
-                "Passages per answer", 1, 20, int(d["top_k"]), key=_key("doc_top_k"))
-            doc_min_score = st.number_input(
-                "Minimum relevance", 0.0, 1.0, float(d["min_score"]), step=0.05,
-                key=_key("doc_min_score"),
-                help="Below this, the page answers that the documents do not "
-                     "cover the question, without asking the model.")
-            doc_chunk = st.number_input(
-                "Passage size (characters)", 300, 5000, int(d["chunk_chars"]),
-                step=100, key=_key("doc_chunk"),
-                help="Changing it needs Rebuild on the Documents page.")
-            doc_overlap = st.number_input(
-                "Passage overlap (characters)", 0, 1000, int(d["overlap_chars"]),
-                step=50, key=_key("doc_overlap"))
+            doc_embedding = st.text_input(
+                "Embedding model (search)", value=d["embedding_model"],
+                key=_key("doc_embedding"),
+                help="Turns passages into vectors for search. English: "
+                     "nomic-embed-text; multilingual: bge-m3. Changing it "
+                     "rebuilds the index.")
+            doc_answer = st.text_input(
+                "Answer model", value=d["answer_model"], key=_key("doc_answer"),
+                help="Writes the answer from the retrieved passages.")
+
+        st.markdown("**Answer**")
+        one, two, three = st.columns(3)
+        with one:
+            doc_temperature = st.number_input(
+                "Temperature", 0.0, 2.0, float(d["answer_temperature"]), step=0.1,
+                key=_key("doc_temperature"),
+                help="0 = the same answer every time and closest to the "
+                     "sources. Higher = freer wording.")
             doc_timeout = st.number_input(
                 "Answer timeout (seconds)", 10, 3600, int(d["answer_timeout"]),
                 key=_key("doc_timeout"))
+        with two:
+            doc_num_ctx = st.number_input(
+                "Context window (tokens)", 1024, 131072, int(d["answer_num_ctx"]),
+                step=1024, key=_key("doc_num_ctx"),
+                help="Must hold the instructions, the passages and recent "
+                     "turns. Larger uses more memory.")
+            doc_keep_alive = st.text_input(
+                "Keep the model loaded for", value=d["answer_keep_alive"],
+                key=_key("doc_keep_alive"),
+                help="Ollama duration such as 5m or 1h; 0 unloads right "
+                     "after each answer; empty uses Ollama's default.")
+        with three:
+            doc_not_found = st.text_input(
+                "Reply when the documents do not answer",
+                value=d["not_found_text"], key=_key("doc_not_found"))
+        doc_prompt = st.text_area(
+            "Answer instructions (system prompt)", value=d["system_prompt"],
+            height=210, key=_key("doc_prompt"),
+            help="Must contain {not_found}, where the reply above goes. A "
+                 "rule to ignore instructions inside the documents is always "
+                 "added if missing.")
+
+        st.markdown("**Search**")
+        one, two, three = st.columns(3)
+        with one:
+            doc_top_k = st.number_input(
+                "Passages per answer", 1, 20, int(d["top_k"]), key=_key("doc_top_k"),
+                help="How many passages the answer model reads.")
+            doc_candidates = st.number_input(
+                "Candidates per search", 1, 200, int(d["candidates"]),
+                key=_key("doc_candidates"),
+                help="Passages considered by each search before the best are "
+                     "picked.")
+        with two:
+            doc_min_score = st.number_input(
+                "Minimum relevance", 0.0, 1.0, float(d["min_score"]), step=0.05,
+                key=_key("doc_min_score"),
+                help="Below this, and with no keyword match, the page answers "
+                     "that the documents do not cover the question, without "
+                     "asking the model. With nomic-embed-text unrelated "
+                     "questions score about 0.5.")
+            doc_fusion_k = st.number_input(
+                "Fusion constant", 1, 1000, int(d["fusion_k"]),
+                key=_key("doc_fusion_k"),
+                help="How meaning and keyword rankings are merged (reciprocal "
+                     "rank fusion). Lower favours each list's top results.")
+        with three:
+            doc_keyword = st.checkbox(
+                "Also search by exact words", value=d["keyword_search"],
+                key=_key("doc_keyword"),
+                help="Finds codes, names and numbers that meaning-based "
+                     "search can miss.")
+
+        st.markdown("**Follow-up questions**")
+        one, two = st.columns(2)
+        with one:
+            doc_history = st.number_input(
+                "Earlier exchanges remembered", 0, 10, int(d["history_exchanges"]),
+                key=_key("doc_history"),
+                help="Question-and-answer pairs sent with a new question. 0 "
+                     "treats every question on its own.")
+        with two:
+            doc_followup = st.number_input(
+                "Short follow-up: fewer than (words)", 0, 50,
+                int(d["followup_words"]), key=_key("doc_followup"),
+                help="A question this short is searched together with the "
+                     "previous question (\"and the education?\").")
+
+        st.markdown("**Indexing**")
+        one, two, three = st.columns(3)
+        with one:
+            doc_chunk = st.number_input(
+                "Passage size (characters)", 300, 5000, int(d["chunk_chars"]),
+                step=100, key=_key("doc_chunk"))
+            doc_overlap = st.number_input(
+                "Passage overlap (characters)", 0, 1000, int(d["overlap_chars"]),
+                step=50, key=_key("doc_overlap"))
+        with two:
+            doc_min_page = st.number_input(
+                "Minimum text per page (characters)", 0, 1000,
+                int(d["min_page_chars"]), key=_key("doc_min_page"),
+                help="Pages with less text are skipped; a file with no such "
+                     "page is listed as 'no text layer'.")
+            doc_header_share = st.number_input(
+                "Header/footer: on at least this share of pages", 0.1, 1.0,
+                float(d["header_share"]), step=0.05, key=_key("doc_header_share"),
+                help="Short lines repeated on this share of pages are removed "
+                     "as headers or footers.")
+        with three:
+            doc_batch = st.number_input(
+                "Embedding batch size", 1, 512, int(d["embed_batch"]),
+                key=_key("doc_batch"))
+            doc_embed_timeout = st.number_input(
+                "Embedding timeout (seconds)", 5, 3600, int(d["embed_timeout"]),
+                key=_key("doc_embed_timeout"))
+            doc_auto_index = st.checkbox(
+                "Index new and changed files when the page opens",
+                value=d["auto_index"], key=_key("doc_auto_index"))
+        st.caption("Changing the embedding model, passage size, overlap, "
+                   "minimum text per page or header/footer share rebuilds the "
+                   "index the next time the Documents page indexes.")
+
+        st.markdown("**Page**")
+        one, two = st.columns(2)
+        with one:
+            doc_examples = st.text_area(
+                "Example questions (one per line)",
+                value="\n".join(d["example_questions"]), height=100,
+                key=_key("doc_examples"),
+                help="Shown on an empty chat. Up to 6.")
+        with two:
             doc_excerpts = st.checkbox(
                 "Show the passages used under each answer",
                 value=d["show_excerpts"], key=_key("doc_excerpts"))
+            doc_downloads = st.checkbox(
+                "Show a button to open each source PDF",
+                value=d["show_downloads"], key=_key("doc_downloads"))
             doc_read_aloud = st.checkbox(
                 "Read aloud button under each answer",
                 value=d["read_aloud"], key=_key("doc_read_aloud"),
                 help="Uses the browser's own voices (local Windows voices "
                      "first), so the answer is not sent anywhere.")
+            doc_rate = st.number_input(
+                "Read aloud speed", 0.5, 2.0, float(d["read_aloud_rate"]),
+                step=0.1, key=_key("doc_rate"))
 
     # ----------------------------------------------------------- About
     with tabs[6]:
@@ -580,6 +696,24 @@ def render(agent_mode_in_use, voice_installed):
             "top_k": doc_top_k, "min_score": doc_min_score,
             "show_excerpts": doc_excerpts,
             "read_aloud": doc_read_aloud,
+            "answer_temperature": doc_temperature,
+            "answer_num_ctx": doc_num_ctx,
+            "answer_keep_alive": doc_keep_alive,
+            "system_prompt": doc_prompt,
+            "not_found_text": doc_not_found,
+            "candidates": doc_candidates,
+            "keyword_search": doc_keyword,
+            "fusion_k": doc_fusion_k,
+            "history_exchanges": doc_history,
+            "followup_words": doc_followup,
+            "embed_batch": doc_batch,
+            "embed_timeout": doc_embed_timeout,
+            "auto_index": doc_auto_index,
+            "min_page_chars": doc_min_page,
+            "header_share": doc_header_share,
+            "example_questions": doc_examples.splitlines(),
+            "show_downloads": doc_downloads,
+            "read_aloud_rate": doc_rate,
         },
     }
     clean, errors = app_settings.validate(edited)

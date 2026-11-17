@@ -31,8 +31,9 @@ def _clean(text):
     return text.strip()
 
 
-def _drop_repeated_lines(pages):
-    """Headers and footers: short lines found on most pages."""
+def _drop_repeated_lines(pages, share=REPEATED_LINE_SHARE):
+    """Headers and footers: short lines found on at least ``share`` of the
+    pages."""
 
     if len(pages) < 3:
         return pages
@@ -41,7 +42,7 @@ def _drop_repeated_lines(pages):
         counts.update({line.strip() for line in page.text.split("\n")
                        if 0 < len(line.strip()) <= 80})
     repeated = {line for line, n in counts.items()
-                if n >= REPEATED_LINE_SHARE * len(pages)
+                if n >= share * len(pages)
                 and not re.fullmatch(r"\d+", line)}
     page_numbers = re.compile(r"^(page\s*)?\d+(\s*(of|/)\s*\d+)?$", re.I)
     cleaned = []
@@ -53,9 +54,9 @@ def _drop_repeated_lines(pages):
     return cleaned
 
 
-def extract_pages(path):
-    """Return the pages that have text. Raises ``ExtractError`` with status
-    ``password`` / ``no_text`` / ``unreadable``."""
+def extract_pages(path, min_page_chars=MIN_PAGE_CHARS, header_share=REPEATED_LINE_SHARE):
+    """Return ``(pages with text, page count)``. Raises ``ExtractError`` with
+    status ``password`` / ``no_text`` / ``unreadable``."""
 
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
@@ -82,8 +83,8 @@ def extract_pages(path):
     except (PdfReadError, OSError, ValueError, KeyError, TypeError) as exc:
         raise ExtractError("unreadable", f"cannot be read: {exc}") from exc
 
-    pages = _drop_repeated_lines(pages)
-    with_text = [p for p in pages if len(p.text) >= MIN_PAGE_CHARS]
+    pages = _drop_repeated_lines(pages, header_share)
+    with_text = [p for p in pages if len(p.text) >= max(1, min_page_chars)]
     if not with_text:
         raise ExtractError("no_text", "no text layer (scanned?)")
     return with_text, len(pages)

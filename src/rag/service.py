@@ -12,7 +12,7 @@ from pathlib import Path
 
 from src.rag.answer import answer, ollama_chat
 from src.rag.embed import OllamaEmbedder
-from src.rag.indexer import index_folder, plan, scan
+from src.rag.indexer import index_folder, index_settings, needs_rebuild, plan, scan
 from src.rag.retrieve import Retriever
 from src.rag.store import Store
 
@@ -60,11 +60,16 @@ def resolve_folder(setting):
 
 class DocumentService:
     def __init__(self, config, index_dir=INDEX_DIR, embedder=None, chat=None):
-        self.config = config
+        from src.settings import DEFAULTS
+
+        # Missing keys (older settings files, tests) take the defaults.
+        self.config = {**DEFAULTS["documents"], **config}
+        config = self.config
         self.folder = resolve_folder(config.get("folder"))
         self.index_dir = Path(index_dir)
         self.embedder = embedder or OllamaEmbedder(
-            config["embedding_model"], config["ollama_url"])
+            config["embedding_model"], config["ollama_url"],
+            config["embed_timeout"], config["embed_batch"])
         self._chat = chat
         self.store = Store(self.index_dir).load()
         self._retriever = None
@@ -75,16 +80,29 @@ class DocumentService:
         """What indexing would do now (cheap: sizes and dates only)."""
         files = scan(self.folder, self.config["recursive"])
         work = plan(self.store, files)
-        if not self.store.matches_model(self.embedder.model):
+        if self.needs_rebuild():
             work["new"] = [f.key for f in files]
             work["changed"] = work["unchanged"] = []
+            work["deleted"] = []
         return files, work
+
+    def index_settings(self):
+        c = self.config
+        return index_settings(self.embedder.model, c["chunk_chars"],
+                              c["overlap_chars"], c["min_page_chars"],
+                              c["header_share"])
+
+    def needs_rebuild(self):
+        """The index was built with other settings (model, passage size,
+        extraction thresholds): it is rebuilt at the next indexing."""
+        return needs_rebuild(self.store, self.index_settings())
 
     def index(self, rebuild=False, progress=None):
         self.store, summary = index_folder(
             self.folder, self.index_dir, self.embedder,
             self.config["chunk_chars"], self.config["overlap_chars"],
-            self.config["recursive"], rebuild, progress)
+            self.config["recursive"], rebuild, progress,
+            self.config["min_page_chars"], self.config["header_share"])
         self._retriever = None
         return summary
 
@@ -122,8 +140,10 @@ class DocumentService:
     def chat(self, messages):
         if self._chat:
             return self._chat(messages)
-        return ollama_chat(messages, self.config["answer_model"],
-                           self.config["ollama_url"], self.config["answer_timeout"])
+        c = self.config
+        return ollama_chat(messages, c["answer_model"], c["ollama_url"],
+                           c["answer_timeout"], c["answer_num_ctx"],
+                           c["answer_keep_alive"], c["answer_temperature"])
 
     def ask(self, question, history=(), folder_id=None, files=None):
         """Answer from the PDFs of ``folder_id`` only. ``files`` narrows the
@@ -138,13 +158,16 @@ class DocumentService:
         # Follow-up questions search with the previous question's words too.
         query = question
         previous = [t["content"] for t in history if t["role"] == "user"]
-        if previous and len(question.split()) < 8:
+        c = self.config
+        if previous and c["history_exchanges"] and len(question.split()) < c["followup_words"]:
             query = f"{previous[-1]} {question}"
         hits, best = self.retriever.search(
-            query, self.config["top_k"], self.config["min_score"], allowed)
+            query, c["top_k"], c["min_score"], allowed, c["candidates"],
+            c["keyword_search"], c["fusion_k"])
         # Defence in depth: nothing from another folder reaches the model.
         hits = [h for h in hits if h["file_key"] in set(allowed)]
-        result = answer(question, hits, self.chat, history)
+        result = answer(question, hits, self.chat, history, c["system_prompt"],
+                        c["not_found_text"], c["history_exchanges"])
         result["best_score"] = round(best, 3)
         result["retrieved"] = len(hits)
         return result

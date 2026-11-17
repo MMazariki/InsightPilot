@@ -28,10 +28,12 @@ def _normalise(matrix):
 
 
 class OllamaEmbedder:
-    def __init__(self, model, base_url="http://localhost:11434", timeout=120):
+    def __init__(self, model, base_url="http://localhost:11434", timeout=120,
+                 batch=BATCH):
         self.model = model
         self.url = base_url.rstrip("/") + "/api/embed"
         self.timeout = timeout
+        self.batch = max(1, int(batch))
 
     def _call(self, texts):
         for attempt in range(3):
@@ -59,11 +61,11 @@ class OllamaEmbedder:
     def embed_documents(self, texts, progress=None):
         prefix = _prefixes(self.model)[0]
         rows = []
-        for start in range(0, len(texts), BATCH):
-            batch = [prefix + t for t in texts[start:start + BATCH]]
+        for start in range(0, len(texts), self.batch):
+            batch = [prefix + t for t in texts[start:start + self.batch]]
             rows.extend(self._call(batch))
             if progress:
-                progress(min(start + BATCH, len(texts)), len(texts))
+                progress(min(start + self.batch, len(texts)), len(texts))
         if not rows:
             return np.zeros((0, 0), dtype=np.float32)
         return _normalise(np.asarray(rows, dtype=np.float32))

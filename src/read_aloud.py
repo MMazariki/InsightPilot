@@ -86,7 +86,7 @@ _TEMPLATE = """
     parts.forEach((text, index) => {
       const u = new SpeechSynthesisUtterance(text);
       if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = "en-US"; }
-      u.rate = 1.0;
+      u.rate = __RATE__;
       if (index === parts.length - 1) {
         u.onend = () => { if (owner() === id) { setOwner(null); } show(false); };
       }
@@ -107,12 +107,14 @@ _TEMPLATE = """
 """
 
 
-def read_aloud_button(text, key):
-    """Draw the button for ``text``. ``key`` identifies the answer."""
+def read_aloud_button(text, key, rate=1.0):
+    """Draw the button for ``text``. ``key`` identifies the answer; ``rate``
+    is the speaking speed (1.0 = normal)."""
 
     parts = sentences(text)
     if not parts:
         return
     html = (_TEMPLATE.replace("__PARTS__", json.dumps(parts))
-            .replace("__ID__", json.dumps(str(key))))
+            .replace("__ID__", json.dumps(str(key)))
+            .replace("__RATE__", json.dumps(min(max(float(rate), 0.5), 2.0))))
     components.html(html, height=40)
