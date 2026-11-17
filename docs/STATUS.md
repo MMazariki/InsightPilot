@@ -26,13 +26,16 @@ its settings moved to Admin).
 
 ## Open items
 
-1. **Accuracy is unmeasured on the current setup.** `docs/EVALUATION.md`
-   measured pipeline v11 on the 2025-only data and the old model. Since
-   then the data covers six years, the model has new measures, and three
-   layers were added after v11 (measure-name check, everyday wording,
-   growth/share/periods). They were checked with developer-written probes,
-   not a pre-registered question set. A fresh evaluation set over the
-   current data would measure them.
+1. **Accuracy measured on the current setup (2026-11-17, one run each,
+   developer-written sets; `docs/EVALUATION.md` §3.4-3.5).** Power BI
+   assistant: 29 / 33 (answerable 23 / 27, declines 6 / 6). Documents page:
+   right page retrieved 20 / 20, correct answer with correct citation
+   13 / 20, unanswerable declined 5 / 5. Known defects found, not yet fixed
+   (a fix needs a new set to measure it): "compare 2025 and 2026" shows all
+   years; "given" sends a clear question to the verifier; the planner can
+   add an unrequested month grouping or pick a raw column; the documents
+   answer model sometimes cites in an unparsed form or the wrong passage, or
+   says "not found" with the passage in hand.
 2. **Unit Price** still adds up prices (2,153,646 against an average of
    17.58 SAR) and is kept out of the app. Fix in Power BI:
    `Unit Price = AVERAGE(FactSales[UnitPriceSAR])`, then run

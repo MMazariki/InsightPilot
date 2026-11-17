@@ -1,6 +1,6 @@
 # InsightPilot — Structured Planning Evaluation
 
-Last updated: 2026-11-16. All numbers below were measured by executing
+Last updated: 2026-11-17 (§3.4 whole app, §3.5 Documents page). All numbers below were measured by executing
 compiled DAX read-only against the Power BI semantic model and comparing with
 captured reference results. Models ran locally via Ollama
 (`qwen2.5-coder:3b`, `qwen2.5-coder:7b`, Q4_K_M, temperature 0,
@@ -212,6 +212,72 @@ negative (both metrics renamed; values verified identical).
   invalid plan for "Compare the regions on units sold per order." Under
   v11, 7B answered all 8 vague unsupported questions with a guessed
   metric.
+
+### 3.4 Whole-app evaluation, 2026-11-17 (app_cases_v1)
+
+Sections 3.1-3.3 measure the planner pipeline on the 2025-only data. This
+set measures the **app as shipped on 2026-11-17**: every question goes
+through `StructuredPlanningAgent.ask` with the app's settings (pipeline v11
+plus the measure-name check, everyday-wording interpretation, plan fixes and
+the growth/share/period analysis layer) against the six-year dataset, and
+the final answer table is compared **by values** with hand-written
+reference DAX (`evaluation/run_app_evaluation.py`; column names ignored,
+percentages shown with one decimal accepted within 0.06 points; ranking
+questions compare the first row). "Today" was fixed to 2026-11-17. Set
+committed before the run (`982f328`), harness before the run (`c7100c4`).
+Model `qwen2.5-coder:7b`, one run.
+
+| Group | Passed |
+|---|---:|
+| Everyday wording (branch, turnover, typos, this year, last month, orders, AOV, by month) | 12 / 15 |
+| Growth, year over year, share, Ramadan, White Friday | 8 / 8 |
+| Targets (achievement, target vs sales, missed target, variance) | 3 / 4 |
+| Should decline (forecast, write, net profit, missing data, vague) | 6 / 6 |
+| **All** | **29 / 33** (answerable 23 / 27) |
+
+Failures:
+
+* APP1-008 "Units sold by category in 2025": the planner added an
+  unrequested YearMonth grouping (48 rows instead of 4).
+* APP1-013 "Discounts given per channel in 2024": "given" is not a known
+  word, so the verifier ran and wrongly declined (over-refusal).
+* APP1-014 "Compare net sales in 2025 and 2026": the app's
+  repeated-filter rule turns the two year filters into a breakdown but
+  drops the restriction to those years, so all six years are shown. A
+  defect in `src/interpret.py`, not in the model.
+* APP1-025 "Sales target vs net sales by region in 2025": the planner used
+  the column SalesTargetSAR, the repair turn did not recover, declined.
+
+Caveats: 33 questions, written by the developer who also wrote the
+interpretation rules, so wording known to the rules is over-represented;
+one run; no confidence interval. The failures above were not fixed against
+this set; a fix needs a new set to be measured.
+
+### 3.5 Documents page, 2026-11-17 (doc_cases_v1)
+
+`evaluation/run_doc_evaluation.py` on four project documents turned into
+PDFs from revision `c7100c4` (28 pages, folder `eval`; the user's own PDFs
+are private and not used). App settings: `nomic-embed-text` + keyword
+search, `qwen2.5:7b-instruct`, 6 passages. Set committed before the run
+(`8a3d324`).
+
+| Measure | Result |
+|---|---:|
+| An acceptable page among the passages given to the model (retrieval) | 20 / 20 |
+| Answer contains the required words | 16 / 20 |
+| Answer cites an acceptable page | 14 / 20 |
+| Correct answer **and** correct citation | **13 / 20** |
+| Unanswerable questions answered "The documents do not answer this." | 5 / 5 |
+
+Search found the right page every time; the misses are in the answer
+model: citations in an unparsed form (the whole answer in brackets, a
+Markdown link "(1)") in 2 cases, the wrong source number cited in 2,
+"do not answer" although the passage was given in 2 (small.en accuracy,
+default minimum relevance), half an answer in 1 (temperature but not the
+quantisation), and 1 answer that is right in substance but lacks the
+pre-registered words ("a routing heuristic, not a security boundary";
+counted as a failure). Caveats: the developer wrote both the documents and
+the questions, so questions are worded close to the text; one run.
 
 ## 4. Known limitations
 
