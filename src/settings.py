@@ -173,8 +173,21 @@ DEFAULTS = {
         "draft_expiry_minutes": 15,
         "attach_xlsx": True,
         "teams_channel_label": "",
+        # How email is sent: "graph" (Microsoft 365 mailbox) or "smtp" (any
+        # email account, e.g. Gmail with an app password; password is a secret).
+        "email_via": "graph",
+        "smtp_host": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_username": "",
+        "smtp_from_name": "InsightPilot",
+        # How tasks are created: "todo" (Microsoft To Do) or "ics" (a calendar
+        # reminder file saved with the exports).
+        "task_via": "todo",
     },
 }
+
+EMAIL_VIA = ("graph", "smtp")
+TASK_VIA = ("todo", "ics")
 
 ACTION_KINDS = ("email", "teams_post", "task", "export")
 
@@ -212,9 +225,11 @@ LIMITS = {
     "max_recipients": (1, 50),
     "daily_cap": (0, 1000),
     "draft_expiry_minutes": (1, 240),
+    "smtp_port": (1, 65535),
 }
 
-SECRET_NAMES = ("planner_api_key", "verifier_api_key", "teams_webhook_url")
+SECRET_NAMES = ("planner_api_key", "verifier_api_key", "teams_webhook_url",
+                "smtp_password")
 
 _EMAIL = re.compile(r"^[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
@@ -445,6 +460,19 @@ def _clean_actions(raw, errors):
     for name in ("todo_list_name", "export_folder"):
         clean[name] = _text(raw.get(name, base[name])) or base[name]
     clean["teams_channel_label"] = _text(raw.get("teams_channel_label", ""))
+    for name, choices in (("email_via", EMAIL_VIA), ("task_via", TASK_VIA)):
+        value = raw.get(name, base[name])
+        clean[name] = value if value in choices else base[name]
+    clean["smtp_host"] = _text(raw.get("smtp_host", base["smtp_host"])) or base["smtp_host"]
+    clean["smtp_from_name"] = _text(raw.get("smtp_from_name", base["smtp_from_name"]))
+    username = _text(raw.get("smtp_username", "")).lower()
+    if username and not _EMAIL.match(username):
+        errors.append("Actions: the sending email account must be an email address.")
+        username = ""
+    clean["smtp_username"] = username
+    port = _number(raw.get("smtp_port", base["smtp_port"]), "smtp_port", int, False,
+                   errors, "Actions: SMTP port")
+    clean["smtp_port"] = base["smtp_port"] if port is None else port
 
     domains = raw.get("allowed_domains", [])
     domains = domains if isinstance(domains, list) else []

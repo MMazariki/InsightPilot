@@ -21,6 +21,12 @@ Differences from the plan below, decided while building:
 * No chart image is attached (vl-convert was not installed); the table is.
 * Approval also requires that the card was drawn (`shown`), so an action
   cannot run in the run that created it.
+* **Added 2026-11-18:** the user's Microsoft account has no Exchange mailbox
+  and no Teams, so email can also go through any email account by SMTP
+  (`email_via: smtp`, password in the encrypted secrets, STARTTLS on 587 or
+  SSL on 465), and tasks can be saved as calendar reminders
+  (`task_via: ics`). The approval card, address book, caps and audit are
+  the same for both routes.
 
 The original plan follows.
 

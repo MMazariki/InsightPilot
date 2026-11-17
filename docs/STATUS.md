@@ -65,11 +65,17 @@ its settings moved to Admin).
     login (anyone using the app can type any folder number). Answer quality
     depends on the 7B model (it once listed a diploma as a certification).
     No measured question set exists yet for documents.
-11. **Agent actions need one-time setup** before email, Teams and To Do
-    work: Graph `Mail.Send` and `Tasks.ReadWrite` (delegated, admin
-    consent) on the app registration; a Teams Workflows webhook; address
-    book and allowed domains in Admin → Actions; then enable. Detection is
-    rules only: unknown wordings ("loop in Sara") are treated as questions.
+11. **Agent actions on this machine (2026-11-18).** Graph consent for
+    `Mail.Send` and `Tasks.ReadWrite` is granted, but the Power BI account
+    (`…onmicrosoft.com`) has **no Exchange mailbox**
+    (`MailboxNotEnabledForRESTAPI`), so Graph email and To Do cannot work,
+    and Teams is not available on the account type (switched off). Email is
+    therefore set to go through the user's own account by SMTP (Gmail app
+    password, to be entered in Admin → Actions), and tasks are saved as
+    calendar reminders (`.ics`). Still to do: enter the SMTP account,
+    address book and allowed domains, enable, send the first real test.
+    Detection is rules only: unknown wordings ("loop in Sara") are treated
+    as questions.
 
 ## Where things are
 

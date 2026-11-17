@@ -85,7 +85,8 @@ def apply_edits(draft, edits, settings, self_address=""):
         return draft
     actions = settings["actions"]
     if "subject" in edits:
-        draft["subject"] = (edits["subject"] or "").strip()
+        # One line: a line break in a subject could add email headers.
+        draft["subject"] = " ".join((edits["subject"] or "").split())
     if "note" in edits:
         draft["note"] = (edits["note"] or "").strip()
     if "attach" in edits:

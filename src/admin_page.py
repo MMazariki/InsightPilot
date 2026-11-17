@@ -250,14 +250,65 @@ def _actions_tab(a, secrets):
     enabled = st.checkbox("Enable actions", value=a["enabled"], key=_key("act_enabled"),
                           help="Off by default. When off, action requests in the chat "
                                "are answered with a short explanation.")
-    labels = {"email": "Email (Microsoft Graph, sent as you)",
-              "teams_post": "Teams channel post (Workflows webhook)",
-              "task": "Microsoft To Do tasks", "export": "Export to Excel / CSV"}
+    labels = {"email": "Email", "teams_post": "Teams channel post (Workflows webhook)",
+              "task": "Tasks / reminders", "export": "Export to Excel / CSV"}
     columns = st.columns(2)
     kinds = {}
     for index, kind in enumerate(app_settings.ACTION_KINDS):
         kinds[kind] = columns[index % 2].checkbox(
             labels[kind], value=a["kinds"][kind], key=_key(f"act_kind_{kind}"))
+
+    st.subheader("Email", divider="gray")
+    email_via = st.radio(
+        "Send email with", app_settings.EMAIL_VIA,
+        index=app_settings.EMAIL_VIA.index(a["email_via"]), horizontal=True,
+        key=_key("act_email_via"),
+        format_func={"graph": "Microsoft 365 mailbox (Graph)",
+                     "smtp": "My own email account (SMTP)"}.get,
+        help="Microsoft 365 needs an Exchange mailbox on the signed-in account. "
+             "SMTP works with any email account, e.g. Gmail.")
+    smtp_host, smtp_port = a["smtp_host"], a["smtp_port"]
+    smtp_user, smtp_name, smtp_password, smtp_remove = (
+        a["smtp_username"], a["smtp_from_name"], "", False)
+    if email_via == "smtp":
+        st.caption("For Gmail: turn on 2-Step Verification, then Google Account → "
+                   "Security → App passwords → create one and paste its 16 letters "
+                   "below (not your normal password). Stored encrypted for your "
+                   "Windows account.")
+        left, right = st.columns([3, 1])
+        smtp_host = left.text_input("Server", value=a["smtp_host"], key=_key("act_smtp_host"))
+        smtp_port = right.number_input("Port", 1, 65535, a["smtp_port"],
+                                       key=_key("act_smtp_port"),
+                                       help="587 (STARTTLS) or 465 (SSL)")
+        left, right = st.columns(2)
+        smtp_user = left.text_input("Sending account", value=a["smtp_username"],
+                                    key=_key("act_smtp_user"),
+                                    placeholder="you@gmail.com")
+        smtp_name = right.text_input("Sender name", value=a["smtp_from_name"],
+                                     key=_key("act_smtp_name"))
+        saved_password = bool(secrets.get("smtp_password"))
+        smtp_password = st.text_input(
+            "App password", type="password", key=_key("act_smtp_password"),
+            placeholder="Saved — type to replace" if saved_password else "")
+        if saved_password:
+            smtp_remove = st.checkbox("Remove the saved password",
+                                      key=_key("act_smtp_password_rm"))
+        ready = (a["email_via"] == "smtp" and a["smtp_username"] and saved_password)
+        if st.button("Send a test email to myself", key=_key("act_smtp_test"),
+                     icon=":material/outgoing_mail:", disabled=not ready,
+                     help="Uses the saved settings: save first. Sends one short "
+                          "email to the sending account only."):
+            _smtp_test(a, secrets)
+
+    st.subheader("Tasks", divider="gray")
+    task_via = st.radio(
+        "Create tasks in", app_settings.TASK_VIA,
+        index=app_settings.TASK_VIA.index(a["task_via"]), horizontal=True,
+        key=_key("act_task_via"),
+        format_func={"todo": "Microsoft To Do (needs an Exchange mailbox)",
+                     "ics": "Calendar reminders (.ics file)"}.get,
+        help="Calendar reminders are saved with the exports; open the file to add "
+             "them to Outlook, Google or Apple Calendar.")
 
     st.subheader("Address book", divider="gray")
     st.caption("Email goes only to these people, to addresses on the allowed "
@@ -344,8 +395,34 @@ def _actions_tab(a, secrets):
         "max_recipients": max_recipients, "daily_caps": caps, "todo_list_name": todo,
         "export_folder": export, "draft_expiry_minutes": expiry, "attach_xlsx": attach,
         "teams_channel_label": channel,
+        "email_via": email_via, "smtp_host": smtp_host, "smtp_port": smtp_port,
+        "smtp_username": smtp_user, "smtp_from_name": smtp_name, "task_via": task_via,
     }
-    return block, (webhook or "").strip(), remove
+    secret_changes = {}
+    if remove:
+        secret_changes["teams_webhook_url"] = ""
+    elif (webhook or "").strip():
+        secret_changes["teams_webhook_url"] = webhook.strip()
+    if smtp_remove:
+        secret_changes["smtp_password"] = ""
+    elif (smtp_password or "").strip():
+        # Google shows app passwords in groups of four letters.
+        secret_changes["smtp_password"] = "".join(smtp_password.split())
+    return block, secret_changes
+
+
+def _smtp_test(a, secrets):
+    from src.actions.executors import run_email_smtp
+
+    settings = app_settings.load()
+    draft = {"subject": "InsightPilot test email", "note": "This is a test of the "
+             "email action. No reply is needed.", "attach": False,
+             "recipients": [{"name": "Me", "email": a["smtp_username"]}],
+             "context": {"question": "Test email", "columns": [], "rows": [],
+                         "notes": [], "answered_at": ""}}
+    with st.spinner("Sending..."):
+        result = run_email_smtp(draft, settings, secrets=secrets)
+    (st.success if result["ok"] else st.error)(result["detail"])
 
 
 def render(agent_mode_in_use, voice_installed):
@@ -751,7 +828,7 @@ def render(agent_mode_in_use, voice_installed):
 
     # --------------------------------------------------------- Actions
     with tabs[6]:
-        actions, webhook_new, webhook_remove = _actions_tab(saved["actions"], secrets)
+        actions, action_secrets = _actions_tab(saved["actions"], secrets)
 
     # ----------------------------------------------------------- About
     with tabs[7]:
@@ -830,14 +907,14 @@ def render(agent_mode_in_use, voice_installed):
         "actions": actions,
     }
     clean, errors = app_settings.validate(edited)
-    if webhook_new:
+    if action_secrets.get("teams_webhook_url"):
         from src.actions.executors import webhook_url_problem
 
-        problem = webhook_url_problem(webhook_new)
+        problem = webhook_url_problem(action_secrets["teams_webhook_url"])
         if problem:
             errors.append("Actions: " + problem)
     key_changes = bool(planner_key or planner_remove or verifier_key or verifier_remove
-                       or webhook_new or webhook_remove)
+                       or action_secrets)
     changed = clean != saved or key_changes
 
     st.divider()
@@ -869,10 +946,8 @@ def render(agent_mode_in_use, voice_installed):
                 app_settings.save_secret("verifier_api_key", "")
             elif verifier_key:
                 app_settings.save_secret("verifier_api_key", verifier_key)
-            if webhook_remove:
-                app_settings.save_secret("teams_webhook_url", "")
-            elif webhook_new:
-                app_settings.save_secret("teams_webhook_url", webhook_new)
+            for name, value in action_secrets.items():
+                app_settings.save_secret(name, value)
             _clear_widget_state()
             st.session_state.admin_notice = (
                 "Settings saved. They apply to the next question.")

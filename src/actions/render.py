@@ -286,6 +286,59 @@ def xlsx_bytes(context, sheet="Answer"):
     return buffer.getvalue()
 
 
+def _ics_text(text):
+    text = str(text).replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+    return text.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "")
+
+
+def _ics_fold(line):
+    """RFC 5545: lines longer than 75 octets continue with a space."""
+
+    data = line.encode("utf-8")
+    if len(data) <= 75:
+        return line
+    parts, current = [], b""
+    for char in line:
+        encoded = char.encode("utf-8")
+        if len(current) + len(encoded) > (75 if not parts else 74):
+            parts.append(current.decode("utf-8"))
+            current = b""
+        current += encoded
+    parts.append(current.decode("utf-8"))
+    return "\r\n ".join(parts)
+
+
+def ics_bytes(tasks, context, now=None):
+    """Tasks as all-day calendar events with a 09:00 reminder: an .ics file
+    that Outlook, Google Calendar and Apple Calendar import."""
+
+    import uuid
+
+    now = now or dt.datetime.now(dt.timezone.utc)
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+    default_day = (now.date() + dt.timedelta(days=1)).isoformat()
+    description = _ics_text(task_body(context))
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//InsightPilot//Actions//EN",
+             "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
+    for task in tasks:
+        day = dt.date.fromisoformat(task.get("due") or default_day)
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{uuid.uuid4()}@insightpilot",
+            f"DTSTAMP:{stamp}",
+            f"DTSTART;VALUE=DATE:{day.strftime('%Y%m%d')}",
+            f"DTEND;VALUE=DATE:{(day + dt.timedelta(days=1)).strftime('%Y%m%d')}",
+            f"SUMMARY:{_ics_text(task['title'])}",
+            f"DESCRIPTION:{description}",
+            "TRANSP:TRANSPARENT",
+            "BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_text(task['title'])}",
+            "TRIGGER;RELATED=START:PT9H", "END:VALARM",
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    return ("\r\n".join(_ics_fold(line) for line in lines) + "\r\n").encode("utf-8")
+
+
 def file_name(context, extension):
     stem = re.sub(r"[^A-Za-z0-9]+", "_", context.get("question") or "answer").strip("_")
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")

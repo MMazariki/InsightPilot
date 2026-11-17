@@ -196,8 +196,10 @@ def render(draft, settings, self_address):
         elif kind == "task":
             if draft.get("filter"):
                 st.caption(f"Rows where {draft['filter']}.")
-            st.text_area(f"Tasks for To Do list ‘{settings['actions']['todo_list_name']}’ "
-                         "(one per line)", value="\n".join(t["title"] for t in draft["tasks"]),
+            target = ("Reminders for your calendar, saved as an .ics file"
+                      if settings["actions"]["task_via"] == "ics" else
+                      f"Tasks for To Do list ‘{settings['actions']['todo_list_name']}’")
+            st.text_area(f"{target} (one per line)", value="\n".join(t["title"] for t in draft["tasks"]),
                          height=min(68 + 24 * len(draft["tasks"]), 300),
                          key=_k(draft, "tasks"))
             due = next((t["due"] for t in draft["tasks"] if t.get("due")), "")
@@ -281,5 +283,11 @@ def _outcome(draft):
 
 
 def self_address_for(settings, query_account=None):
+    """Where "email this to me" goes: the sending account when email goes out
+    through SMTP, else the signed-in Microsoft account."""
+
+    actions = settings["actions"]
+    if actions["email_via"] == "smtp" and actions["smtp_username"]:
+        return actions["smtp_username"]
     address = (query_account or settings["powerbi"].get("username") or "").strip().lower()
     return address if address_book.is_email(address) else ""

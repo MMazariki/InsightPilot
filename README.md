@@ -167,10 +167,22 @@ Actions are **off by default**. To turn them on: Admin → Actions → Enable,
 fill the address book and allowed domains. Export works straight away
 (files go to `exports\`). Teams needs a Workflows webhook address for the
 channel (Teams: channel ⋯ → Workflows → *Post to a channel when a webhook
-request is received*). Email and To Do need two Microsoft Graph permissions
-on the app registration, `Mail.Send` and `Tasks.ReadWrite` (delegated, with
-admin consent); the first use opens one Microsoft sign-in window. Design and
-rules: `docs/AGENT_ACTIONS_PLAN.md`.
+request is received*).
+
+Email can go out two ways (Admin → Actions → Email):
+
+* **My own email account (SMTP)**, for example Gmail: enter the address and
+  an *app password* (Google Account → Security → 2-Step Verification → App
+  passwords; not your normal password). It is stored encrypted. "Send a test
+  email to myself" checks it. "Email this to me" goes to this account.
+* **Microsoft 365 mailbox (Graph)**: needs `Mail.Send` (delegated, admin
+  consent) on the app registration **and an Exchange Online mailbox** on
+  the signed-in account; a Power BI-only account has none.
+
+Tasks are either **calendar reminders** (an `.ics` file saved with the
+exports; open it to add the reminders to Outlook, Google or Apple Calendar)
+or **Microsoft To Do** (`Tasks.ReadWrite` and an Exchange mailbox). Design
+and rules: `docs/AGENT_ACTIONS_PLAN.md`.
 
 ## Evaluation dashboard
 

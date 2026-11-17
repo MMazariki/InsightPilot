@@ -149,7 +149,113 @@ def _graph_error(response):
     return f"Microsoft Graph answered HTTP {response.status_code}: {message}"
 
 
-def run_email(draft, settings, token_provider=None, http=None, **_):
+def run_email(draft, settings, **kwargs):
+    if settings["actions"]["email_via"] == "smtp":
+        return run_email_smtp(draft, settings, **kwargs)
+    return run_email_graph(draft, settings, **kwargs)
+
+
+def run_task(draft, settings, **kwargs):
+    if settings["actions"]["task_via"] == "ics":
+        return run_task_ics(draft, settings, **kwargs)
+    return run_task_todo(draft, settings, **kwargs)
+
+
+def _attachment(draft):
+    """``(name, bytes, mime subtype)`` of the table file, or ``None``."""
+
+    context = draft["context"]
+    if not (draft.get("attach") and context["rows"]):
+        return None
+    extension = draft.get("format", "xlsx")
+    if extension == "csv":
+        return render.file_name(context, "csv"), render.csv_bytes(context), "csv"
+    return (render.file_name(context, "xlsx"), render.xlsx_bytes(context),
+            "vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def smtp_message(draft, settings):
+    from email.message import EmailMessage
+    from email.utils import formataddr, make_msgid
+
+    actions = settings["actions"]
+    message = EmailMessage()
+    message["Subject"] = draft["subject"]
+    message["From"] = formataddr((actions["smtp_from_name"], actions["smtp_username"]))
+    message["To"] = ", ".join(formataddr((r["name"], r["email"]))
+                              for r in draft["recipients"])
+    message["Message-ID"] = make_msgid(domain=actions["smtp_username"].rsplit("@", 1)[-1])
+    message.set_content(render.email_text(draft["context"], draft.get("note", "")) + "\n\n"
+                        + render.footer(draft["context"]))
+    message.add_alternative(render.email_html(draft["context"], draft.get("note", "")),
+                            subtype="html")
+    attachment = _attachment(draft)
+    if attachment:
+        name, data, subtype = attachment
+        message.add_attachment(data, maintype="application", subtype=subtype, filename=name)
+    return message
+
+
+def run_email_smtp(draft, settings, secrets=None, smtp_factory=None, **_):
+    """Send through the user's own email account (e.g. Gmail + app password)."""
+
+    import smtplib
+    import ssl
+
+    actions = settings["actions"]
+    password = (secrets or {}).get("smtp_password", "")
+    if not actions["smtp_username"] or not password:
+        return {"ok": False, "detail": "The sending email account or its password is "
+                "not saved (Admin -> Actions -> Email)."}
+    message = smtp_message(draft, settings)
+    host, port = actions["smtp_host"], actions["smtp_port"]
+    context = ssl.create_default_context()
+    try:
+        if smtp_factory:
+            server = smtp_factory(host, port)
+        elif port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=TIMEOUT, context=context)
+        else:
+            server = smtplib.SMTP(host, port, timeout=TIMEOUT)
+        with server:
+            if port != 465 and not smtp_factory:
+                server.starttls(context=context)
+            server.login(actions["smtp_username"], password)
+            refused = server.send_message(message) or {}
+    except smtplib.SMTPAuthenticationError:
+        return {"ok": False, "detail": "The email server refused the sign-in. For Gmail, "
+                "use an app password (Google Account -> Security -> 2-Step "
+                "Verification -> App passwords), not your normal password."}
+    except (smtplib.SMTPException, OSError) as exc:
+        return {"ok": False, "detail": f"Sending failed: {type(exc).__name__}: "
+                f"{str(exc)[:200]}"}
+    sent = [r["email"] for r in draft["recipients"] if r["email"] not in refused]
+    if refused:
+        return {"ok": False, "detail": "Sent to " + (", ".join(sent) or "nobody")
+                + "; refused by the server: " + ", ".join(refused)}
+    return {"ok": True, "detail": "Sent from " + actions["smtp_username"] + " to "
+            + ", ".join(sent) + " (a copy is in that account's Sent folder)."}
+
+
+def run_task_ics(draft, settings, **_):
+    """Save the tasks as calendar reminders (.ics) next to the exports."""
+
+    data = render.ics_bytes(draft["tasks"], draft["context"])
+    folder = export_folder(settings)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / render.file_name(draft["context"], "ics").replace(
+        ".ics", "_reminders.ics")
+    temporary = path.with_suffix(".tmp")
+    temporary.write_bytes(data)
+    os.replace(temporary, path)
+    count = len(draft["tasks"])
+    return {"ok": True, "path": str(path), "created": count,
+            "detail": f"Saved {count} reminder{'s' if count != 1 else ''} as "
+            f"{path.name}. Open it to add them to your calendar (Outlook, Google, "
+            "Apple)."}
+
+
+def run_email_graph(draft, settings, token_provider=None, http=None, **_):
     try:
         token = graph_token("email", settings, token_provider)
     except Exception as exc:
@@ -161,14 +267,12 @@ def run_email(draft, settings, token_provider=None, http=None, **_):
         "toRecipients": [{"emailAddress": {"address": r["email"], "name": r["name"]}}
                          for r in draft["recipients"]],
     }
-    if draft.get("attach") and context["rows"]:
-        extension = draft.get("format", "xlsx")
-        data = (render.csv_bytes(context) if extension == "csv"
-                else render.xlsx_bytes(context))
+    attachment = _attachment(draft)
+    if attachment:
+        name, data, _subtype = attachment
         message["attachments"] = [{
             "@odata.type": "#microsoft.graph.fileAttachment",
-            "name": render.file_name(context, extension),
-            "contentBytes": base64.b64encode(data).decode("ascii")}]
+            "name": name, "contentBytes": base64.b64encode(data).decode("ascii")}]
     http = http or requests
     try:
         response = http.post(f"{GRAPH}/me/sendMail", json={"message": message,
@@ -183,7 +287,7 @@ def run_email(draft, settings, token_provider=None, http=None, **_):
     return {"ok": False, "detail": _graph_error(response)}
 
 
-def run_task(draft, settings, token_provider=None, http=None, **_):
+def run_task_todo(draft, settings, token_provider=None, http=None, **_):
     try:
         token = graph_token("task", settings, token_provider)
     except Exception as exc:

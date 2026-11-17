@@ -37,6 +37,10 @@ def problems(draft, settings, secrets=None, self_address="", log=None, today=Non
         book = actions["address_book"]
         domains = actions["allowed_domains"]
         recipients = draft.get("recipients", [])
+        if actions["email_via"] == "smtp" and not (
+                actions["smtp_username"] and (secrets or {}).get("smtp_password")):
+            found.append("The sending email account is not set up (Admin -> Actions "
+                         "-> Email).")
         if not recipients:
             found.append("Choose at least one recipient.")
         if len(recipients) > actions["max_recipients"]:

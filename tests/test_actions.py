@@ -4,6 +4,7 @@ Graph and the Teams webhook are fakes: nothing is sent by these tests."""
 
 import datetime as dt
 import json
+from pathlib import Path
 
 import pytest
 
@@ -308,6 +309,83 @@ def test_graph_403_explains_consent(tmp_path):
     http = _Http(_Response(403, {"error": {"code": "ErrorAccessDenied", "message": "no"}}))
     result = executors.run_email(draft, settings, token_provider=lambda s: "T", http=http)
     assert not result["ok"] and "admin consent" in result["detail"]
+
+
+class _Smtp:
+    sent = []
+
+    def __init__(self, host, port, fail=None):
+        self.host, self.port, self.fail = host, port, fail
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def login(self, user, password):
+        import smtplib
+        if self.fail == "auth":
+            raise smtplib.SMTPAuthenticationError(535, b"bad")
+        self.login_as = (user, password)
+
+    def send_message(self, message):
+        _Smtp.sent.append(message)
+        return {}
+
+
+def _smtp_settings(**extra):
+    return _settings(email_via="smtp", smtp_username="sender@company.com", **extra)
+
+
+def test_smtp_sends_html_with_attachment(tmp_path):
+    _Smtp.sent = []
+    settings = _smtp_settings()
+    draft, _ = _draft("email this to Ahmed saying please review", tmp_path, settings)
+    result = executors.run_email(draft, settings, secrets={"smtp_password": "app"},
+                                 smtp_factory=_Smtp)
+    assert result["ok"], result
+    message = _Smtp.sent[0]
+    assert message["To"] == "Ahmed Saleh <ahmed@company.com>"
+    assert message["From"] == "InsightPilot <sender@company.com>"
+    parts = [p.get_content_type() for p in message.walk()]
+    assert "text/html" in parts and "text/plain" in parts
+    assert any(p.get_filename() and p.get_filename().endswith(".xlsx")
+               for p in message.walk())
+
+
+def test_smtp_auth_failure_explains_app_password(tmp_path):
+    settings = _smtp_settings()
+    draft, _ = _draft("email this to Ahmed", tmp_path, settings)
+    result = executors.run_email(draft, settings, secrets={"smtp_password": "x"},
+                                 smtp_factory=lambda h, p: _Smtp(h, p, fail="auth"))
+    assert not result["ok"] and "app password" in result["detail"]
+
+
+def test_smtp_needs_account_and_password(tmp_path):
+    settings = _smtp_settings()
+    draft, _ = _draft("email this to Ahmed", tmp_path, settings)
+    assert any("not set up" in p for p in problems(draft, settings, {},
+                                                   log=tmp_path / "a.jsonl"))
+    assert problems(draft, settings, {"smtp_password": "x"}, log=tmp_path / "a.jsonl") == []
+
+
+def test_subject_edit_cannot_add_headers(tmp_path):
+    draft, settings = _draft("email this to Ahmed", tmp_path)
+    service.apply_edits(draft, {"subject": "Hi\r\nBcc: x@evil.com"}, settings)
+    assert draft["subject"] == "Hi Bcc: x@evil.com"
+
+
+def test_tasks_as_calendar_file(tmp_path):
+    settings = _settings(task_via="ics", export_folder=str(tmp_path / "out"))
+    draft, _ = _draft("create a task for every store below 85% by Friday", tmp_path,
+                      settings)
+    result = executors.run_task(draft, settings)
+    assert result["ok"] and result["created"] == 2
+    text = Path(result["path"]).read_bytes().decode("utf-8")
+    assert text.count("BEGIN:VEVENT") == 2 and "DTSTART;VALUE=DATE:20261120" in text
+    assert all(len(line.encode()) <= 75 for line in text.split("\r\n"))
+    assert "\\," in text or "\\;" in text or "SUMMARY:Follow up on" in text
 
 
 def test_no_mailbox_is_explained(tmp_path):
