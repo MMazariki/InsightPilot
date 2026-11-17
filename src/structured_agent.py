@@ -202,6 +202,7 @@ class StructuredPlanningAgent:
         self.suggestions: list[str] = []
         self._vocabulary = None
         self.last_trace: dict[str, Any] | None = None
+        self.last_result: dict[str, Any] | None = None
 
     # -------------------------------------------------------------
     # Planning
@@ -329,6 +330,9 @@ class StructuredPlanningAgent:
         trace = {"trace_id": uuid.uuid4().hex[:12], "stages": [],
                  "pipeline": PIPELINE_VERSION, "model": self.model}
         self.last_trace = trace
+        # What the answer showed, for the app-level evaluation:
+        # {"kind": "answer" | "declined" | "failed" | "error", columns, rows}.
+        self.last_result = {"kind": "failed"}
         LOGGER.info("[%s] question received", trace["trace_id"])
 
         # A chart type named in the question ("... as a pie chart") is taken
@@ -368,8 +372,9 @@ class StructuredPlanningAgent:
             trace["stages"].append("failed_validation")
             trace["error"] = str(exc)
             LOGGER.info("[%s] no valid plan: %s", trace["trace_id"], exc)
+            self.last_result = {"kind": "failed", "error": str(exc)}
             return (
-                "I couldn't turn that question into a valid query against "
+                "I couldn't turn that question into a valid query against"
                 "the semantic model, so nothing was executed. Try naming "
                 "the measure and the breakdown you want (for example "
                 "*net sales by store region*).\n\n"
@@ -386,6 +391,7 @@ class StructuredPlanningAgent:
             if self.suggestions:
                 offer = ("Did you mean: " + " or ".join(
                     f"**{s}**" for s in self.suggestions) + "?\n\n")
+            self.last_result = {"kind": "declined", "reason": response["reason"]}
             return (
                 f"{read_note}{response['message']}\n\n{offer}"
                 f"_No query was executed. Trace: `{trace['trace_id']}`_"
@@ -418,6 +424,7 @@ class StructuredPlanningAgent:
                 validate_query_plan(adjusted)
             except ValueError as exc:
                 trace["stages"].append("analysis_invalid")
+                self.last_result = {"kind": "failed", "error": str(exc)}
                 return (
                     f"{read_note}I understood the question but could not build "
                     f"the comparison from the planned query ({exc}). Try "
@@ -437,6 +444,7 @@ class StructuredPlanningAgent:
             trace["stages"].append("execution_error")
             LOGGER.warning("[%s] execution failed: %s", trace["trace_id"],
                            type(exc).__name__)
+            self.last_result = {"kind": "error", "error": str(exc)}
             return (
                 f"The query was valid but Power BI returned an error: {exc}\n\n"
                 f"```dax\n{dax}\n```\n\n_Trace: `{trace['trace_id']}`_"
@@ -487,6 +495,8 @@ class StructuredPlanningAgent:
 
         for note in plan_notes:
             read_note += f"_Note: {note}._\n\n"
+        self.last_result = {"kind": "answer", "columns": table_result["columns"],
+                            "rows": table_result["rows"], "dax": dax}
         return read_note + "\n\n".join([
             format_result_table(table_result["columns"], table_result["rows"],
                                 self.options["max_table_rows"])
