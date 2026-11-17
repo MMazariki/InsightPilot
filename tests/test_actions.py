@@ -310,6 +310,15 @@ def test_graph_403_explains_consent(tmp_path):
     assert not result["ok"] and "admin consent" in result["detail"]
 
 
+def test_no_mailbox_is_explained(tmp_path):
+    draft, settings = _draft("create a task to check this", tmp_path)
+    body = {"error": {"code": "itemNotFound", "innerError": {
+        "code": "MailboxNotEnabledForRESTAPI"}}}
+    http = _Http(_Response(404, body, text=json.dumps(body)))
+    result = executors.run_task(draft, settings, token_provider=lambda s: "T", http=http)
+    assert not result["ok"] and "no Exchange Online mailbox" in result["detail"]
+
+
 def test_todo_creates_list_then_tasks(tmp_path):
     draft, settings = _draft("create a task for every store below 85% by Friday", tmp_path)
     http = _Http(_Response(200, {"value": []}), _Response(201, {"id": "L1"}),

@@ -139,6 +139,10 @@ def _graph_error(response):
         message = f"{error.get('code', '')}: {error.get('message', '')}".strip(": ")
     except ValueError:
         message = response.text[:200]
+    if "MailboxNotEnabledForRESTAPI" in response.text or "MailboxNotEnabled" in message:
+        return ("This Microsoft account has no Exchange Online mailbox, which email "
+                "and To Do need (a Microsoft 365 licence with Exchange). Use export, "
+                "or sign in with an account that has a mailbox.")
     if response.status_code == 403:
         message += (" (the app registration needs the Microsoft Graph permission "
                     "and admin consent; see docs/AGENT_ACTIONS_PLAN.md §6)")
