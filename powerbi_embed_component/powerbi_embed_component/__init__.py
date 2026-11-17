@@ -63,6 +63,27 @@ out = st.components.v2.component(
                     color: #667085;
                 }
 
+                .pbi-status.pbi-warn {
+                    color: #B54708;
+                }
+
+                .pbi-switch {
+                    background: none;
+                    border: none;
+                    padding: 0;
+                    color: #2251D1;
+                    font: inherit;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    text-decoration: underline;
+                    text-underline-offset: 2px;
+                }
+
+                .pbi-switch[hidden] {
+                    display: none;
+                }
+
                 .pbi-report {
                     width: 100%;
                     height: 760px;
@@ -80,6 +101,9 @@ out = st.components.v2.component(
                 <span class="pbi-status">
                     Sign in to display your report.
                 </span>
+                <button class="pbi-switch" hidden>
+                    Use a different account
+                </button>
             </div>
 
             <div class="pbi-report"></div>
@@ -100,10 +124,14 @@ def powerbi_embed_component(
     visual_request=None,
     report_id=None,
     page_id=None,
+    login_hint=None,
 ):
     """Display the authenticated Power BI report and accept visual requests.
 
     ``report_id`` / ``page_id`` override the built-in report (Admin page).
+    ``login_hint`` is the Microsoft account to sign in with (the one the
+    app's queries use); the account chooser always opens so another
+    signed-in account is never picked silently.
     """
 
     return out(
@@ -115,5 +143,6 @@ def powerbi_embed_component(
             "reportId": report_id or DEFAULT_REPORT_ID,
             "pageId": page_id or DEFAULT_PAGE_ID,
             "visualRequest": visual_request,
+            "loginHint": login_hint or "",
         },
     )

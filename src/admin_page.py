@@ -406,8 +406,10 @@ def render(agent_mode_in_use, voice_installed):
             username = st.text_input(
                 "Sign-in account", value=b["username"], key=_key("username"),
                 placeholder=os.environ.get("ENTRA_USERNAME", "First signed-in account"),
-                help="Which saved Microsoft account to use when several are "
-                     "signed in.")
+                help="The Microsoft account that has Power BI. Answers use "
+                     "it, and the report panel's sign-in suggests it in the "
+                     "account chooser. Leave empty to use the first saved "
+                     "sign-in.")
         with two:
             report_id = st.text_input(
                 "Report ID (right-hand panel)", value=b["report_id"],

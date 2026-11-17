@@ -65,6 +65,34 @@ def list_pages(report_id, workspace_id=None, timeout=15, service=None):
             service.close()
 
 
+def query_account(configured=None, service=None):
+    """The Microsoft account the app's Power BI queries use: the one set in
+    Admin settings, else the first saved sign-in. ``None`` if unknown.
+
+    The report panel signs in separately, in the browser; this is offered
+    to it as the account to pick, so both use the same one.
+    """
+
+    if configured:
+        return configured
+    owns_service = service is None
+    try:
+        if owns_service:
+            from src.powerbi_query_service import PowerBIQueryService
+
+            service = PowerBIQueryService()
+        accounts = service.msal_app.get_accounts()
+        return accounts[0].get("username") if accounts else None
+    except Exception:
+        return None
+    finally:
+        if owns_service and service is not None:
+            try:
+                service.close()
+            except Exception:
+                pass
+
+
 def resolve_page_id(report_id, workspace_id=None, preferred=PREFERRED_PAGE_NAME):
     """The current ID of the chart page, or ``None`` if it cannot be found."""
 

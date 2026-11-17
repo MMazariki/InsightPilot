@@ -102,3 +102,19 @@ def test_resolve_page_id_returns_none_on_any_failure(monkeypatch):
     monkeypatch.setattr(report_pages, "list_pages", lambda *a, **k: [
         {"name": "x1", "displayName": "AI Canvas", "order": 0}])
     assert report_pages.resolve_page_id("REPORT") == "x1"
+
+
+class _AccountsService:
+    def __init__(self, accounts):
+        self.msal_app = type("App", (), {"get_accounts": lambda _self: accounts})()
+
+    def close(self):
+        pass
+
+
+def test_query_account_prefers_the_configured_account():
+    from src.report_pages import query_account
+    service = _AccountsService([{"username": "cached@example.com"}])
+    assert query_account("admin@example.com", service) == "admin@example.com"
+    assert query_account(None, service) == "cached@example.com"
+    assert query_account(None, _AccountsService([])) is None

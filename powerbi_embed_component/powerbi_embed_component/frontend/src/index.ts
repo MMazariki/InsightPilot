@@ -56,6 +56,8 @@ type ComponentData = {
   reportId: string;
   pageId: string;
   visualRequest: (AgentVisualRequest & { requestId: string }) | null;
+  // The account the app's Power BI queries use; offered in the chooser.
+  loginHint?: string;
 };
 
 const POWERBI_SCOPE =
@@ -93,8 +95,9 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
   const button = root?.querySelector<HTMLButtonElement>(".pbi-login");
   const status = root?.querySelector<HTMLElement>(".pbi-status");
   const reportContainer = root?.querySelector<HTMLElement>(".pbi-report");
+  const switchButton = root?.querySelector<HTMLButtonElement>(".pbi-switch");
 
-  if (!root || !button || !status || !reportContainer) {
+  if (!root || !button || !status || !reportContainer || !switchButton) {
     throw new Error("Power BI component HTML elements are missing.");
   }
 
@@ -312,11 +315,20 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
     console.log("AGENTIC VISUAL REQUEST PROCESSED:", request.requestId);
   };
 
-  const showStatus = (message: string) => {
-    if (!disposed) status.textContent = message;
+  const showStatus = (message: string, warn = false) => {
+    if (disposed) return;
+    status.textContent = message;
+    status.classList.toggle("pbi-warn", warn);
   };
 
-  const getAccessToken = async (): Promise<string> => {
+  // The browser may already be signed in to a different Microsoft account
+  // (for example one without Power BI). Never pick an account silently:
+  // reuse only the account chosen earlier in this tab, otherwise open the
+  // account chooser with the query account suggested.
+  const sameAccount = (a?: string, b?: string) =>
+    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+  const getAccessToken = async (chooseAccount = false): Promise<string> => {
     if (!msal) {
       msal = new PublicClientApplication({
         auth: {
@@ -332,17 +344,28 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
       await msal.initialize();
     }
 
-    showStatus("Opening Microsoft sign-in...");
+    const active = msal.getActiveAccount();
+    if (active && !chooseAccount) {
+      try {
+        const silent = await msal.acquireTokenSilent({
+          scopes: [POWERBI_SCOPE],
+          account: active,
+        });
+        if (silent.accessToken) return silent.accessToken;
+      } catch (error) {
+        if (!(error instanceof InteractionRequiredAuthError)) {
+          console.warn("Silent Power BI sign-in failed:", error);
+        }
+      }
+    }
 
-    console.log("MSAL WINDOW DIAGNOSTIC:", {
-      url: window.location.href,
-      name: window.name,
-      hasOpener: !!window.opener,
-      isIframe: window.parent !== window,
-    });
+    showStatus("Choose the Microsoft account that has Power BI...");
 
+    const hint = currentData.loginHint || undefined;
     const loginResult = await msal.loginPopup({
       scopes: [POWERBI_SCOPE],
+      prompt: "select_account",
+      loginHint: chooseAccount ? undefined : hint,
     });
 
     if (!loginResult.accessToken) {
@@ -356,12 +379,29 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
     return loginResult.accessToken;
   };
 
-  const loadReport = async () => {
+  const signedInAs = (): string =>
+    msal?.getActiveAccount()?.username ?? "";
+
+  const describeAccount = (): { text: string; warn: boolean } => {
+    const user = signedInAs();
+    const hint = currentData.loginHint;
+    if (user && hint && !sameAccount(user, hint)) {
+      return {
+        text: `Signed in as ${user}; the app's answers use ${hint}.`,
+        warn: true,
+      };
+    }
+    return { text: user ? `Signed in as ${user}.` : "", warn: false };
+  };
+
+  const loadReport = async (chooseAccount = false) => {
     try {
       button.disabled = true;
+      switchButton.disabled = true;
       showStatus("Authenticating with Microsoft Entra...");
 
-      const accessToken = await getAccessToken();
+      const accessToken = await getAccessToken(chooseAccount);
+      switchButton.hidden = false;
 
       showStatus("Retrieving Power BI report details...");
 
@@ -376,6 +416,13 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
 
       if (!response.ok) {
         const errorText = await response.text();
+        if ([401, 403, 404].includes(response.status)) {
+          throw new Error(
+            `${signedInAs() || "This account"} cannot open this report ` +
+              `(HTTP ${response.status}). Click "Use a different account" ` +
+              "and pick the account that has Power BI.",
+          );
+        }
         throw new Error(`Power BI API error ${response.status}: ${errorText}`);
       }
 
@@ -434,7 +481,11 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
 
           if (targetPage) {
             await embeddedReport.setPage(data.pageId);
-            showStatus("Power BI report loaded.");
+            const account = describeAccount();
+            showStatus(
+              `Power BI report loaded. ${account.text}`.trim(),
+              account.warn,
+            );
 
             console.log("AGENTIC REPORT READY FOR VISUAL REQUESTS");
 			if (currentData.visualRequest) {
@@ -461,11 +512,27 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
         showStatus(`Power BI report error: ${JSON.stringify(detail)}`);
       });
     } catch (error) {
-      showStatus(`Error: ${String(error)}`);
+      const message = String(error);
+      // AADSTS50020 / 50034 / 90072: the account is not in the tenant.
+      const wrongTenant = /AADSTS(50020|50034|90072|700016)/.test(message);
+      showStatus(
+        wrongTenant
+          ? 'This Microsoft account is not in the organisation that owns ' +
+              'the report. Click "Use a different account".'
+          : `Error: ${message}`,
+        true,
+      );
+      switchButton.hidden = false;
     } finally {
-      if (!disposed) button.disabled = false;
+      if (!disposed) {
+        button.disabled = false;
+        switchButton.disabled = false;
+      }
     }
   };
+
+  const onSignIn = () => void loadReport(false);
+  const onSwitchAccount = () => void loadReport(true);
 
   const instance: PowerBIComponentInstance = {
     update: (newData: ComponentData) => {
@@ -485,13 +552,15 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
 
   componentInstances.set(parentElement, instance);
 
-  button.addEventListener("click", loadReport);
+  button.addEventListener("click", onSignIn);
+  switchButton.addEventListener("click", onSwitchAccount);
   instance.dispose = () => {
     if (disposed) return;
 
     disposed = true;
 
-    button.removeEventListener("click", loadReport);
+    button.removeEventListener("click", onSignIn);
+    switchButton.removeEventListener("click", onSwitchAccount);
 
     if (embeddedReport) {
       powerbi.reset(reportContainer);

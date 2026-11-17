@@ -148,6 +148,11 @@ environment variables for Power BI sign-in.
 
 ## Troubleshooting
 
+* **Two Microsoft accounts.** The report panel always opens Microsoft's
+  account chooser, with the account the app's answers use (Admin → Power BI
+  → Sign-in account, or the saved sign-in) suggested. After loading, the
+  panel says which account it is signed in as and warns if it differs.
+  "Use a different account" next to the status reopens the chooser.
 * Logs are in `logs\`: `server.log` (starts, stops, restarts),
   `app.err.log` and `app.out.log` (the app itself).
 * "Local model offline" in the header means Ollama is not responding. The

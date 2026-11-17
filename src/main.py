@@ -304,6 +304,11 @@ def current_report_page(report_id, workspace_id):
     return report_pages.resolve_page_id(report_id, workspace_id)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def current_query_account(configured):
+    return report_pages.query_account(configured or None)
+
+
 def render_answer(content):
     """Show an assistant message; the query plan and DAX go in an expander."""
 
@@ -634,6 +639,7 @@ with report_column, st.container(border=True, key="report_card"):
         visual_request=st.session_state.visual_request,
         report_id=report_id,
         page_id=page_id or None,
+        login_hint=current_query_account(SETTINGS["powerbi"]["username"]),
     )
 
 st.html(
