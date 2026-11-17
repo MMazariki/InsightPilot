@@ -32,6 +32,15 @@ TYPE_NAMES = {"Number": "Double", "Integer": "Integer", "Text": "Text",
               "Decimal": "Double", "Currency": "Double"}
 
 
+# Columns kept out of the app on every sync, with the reason.
+HIDDEN_COLUMNS = {
+    # A calculated column holding the grand total of orders on every row.
+    # The planner used it as a measure ("Total Orders" = units, then a
+    # failed first plan for every ratio); the Orders measure replaces it.
+    ("FactSales", "Total Orders"),
+}
+
+
 def _is_auto(table):
     return table.startswith(("LocalDateTable_", "DateTableTemplate_"))
 
@@ -48,7 +57,8 @@ def read_live(service):
         return [(r["[T]"], r["[N]"], TYPE_NAMES.get(r["[Type]"], r["[Type]"]))
                 for r in rows if not r["[Hidden]"] and not _is_auto(r["[T]"])]
 
-    return keep(columns), keep(measures)
+    return ([c for c in keep(columns) if (c[0], c[1]) not in HIDDEN_COLUMNS],
+            keep(measures))
 
 
 def compare(schema, live_columns, live_measures, skip=()):

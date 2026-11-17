@@ -110,22 +110,35 @@ _CALENDAR = {
 }
 
 
+_TIMELINE = {"Year", "Quarter", "YearMonth", "Date"}
+
+
 def _calendar_order(result, plan):
     """Month and day names sort alphabetically in DAX; when the plan asks
     for no order, show them in calendar order (other columns first)."""
 
-    if plan.get("order_by") or not result.get("rows"):
+    if not result.get("rows"):
+        return result
+    # Sorting by the month or day name itself means calendar order too.
+    if any(_column_label(item["field"]) not in _CALENDAR
+           for item in plan.get("order_by") or []):
         return result
     columns = result["columns"]
     named = [(c, _CALENDAR[_column_label(c)]) for c in columns
              if _column_label(c) in _CALENDAR]
-    if not named:
+    # Years, quarters, year-months and dates in time order too.
+    timeline = [c for c in columns if _column_label(c) in _TIMELINE]
+    if not named and not timeline:
+        return result
+    if not named and plan.get("order_by"):
         return result
     others = [c for c in columns if not c.startswith("[")
-              and _column_label(c) not in _CALENDAR]
+              and _column_label(c) not in _CALENDAR
+              and _column_label(c) not in _TIMELINE]
 
     def key(row):
         return (tuple(str(row.get(c)) for c in others)
+                + tuple(str(row.get(c)) for c in timeline)
                 + tuple(order.index(row.get(c)) if row.get(c) in order else 99
                         for c, order in named))
 
@@ -384,7 +397,11 @@ class StructuredPlanningAgent:
             from evaluation.query_plan_validator import validate_query_plan
             from src.interpret import normalize_plan
 
-            fixed, plan_notes = normalize_plan(plan)
+            fixed, plan_notes = normalize_plan(plan, question)
+            if spec and (spec.get("period") or spec.get("growth")):
+                # Their own date handling replaces the month rules.
+                plan_notes = [n for n in plan_notes
+                              if not n.startswith(("each month", "all years"))]
             if fixed != plan:
                 try:
                     validate_query_plan(fixed)

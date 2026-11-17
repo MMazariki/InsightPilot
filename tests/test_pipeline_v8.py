@@ -22,7 +22,9 @@ def plan_with_measure(name):
 def test_column_hint_has_decline_path_only_in_v8():
     # fresh_v7 7B: "total marketing spend by channel" -> measure "Total Orders"
     # (a FactSales column) -> v6/v7 hint -> unrelated query was executed.
-    candidate = plan_with_measure("Total Orders")
+    # "Total Orders" was taken out of the app's model on 2026-11-17, so the
+    # same case is checked with another FactSales column.
+    candidate = plan_with_measure("NetSalesSAR")
     with pytest.raises(ValueError) as v7:
         check_reference_hints(candidate)
     with pytest.raises(ValueError) as v8:

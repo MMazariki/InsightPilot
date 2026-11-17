@@ -33,10 +33,14 @@ The earlier tag `snapshot-2026-11-17` marks the morning state.
    17.58 SAR) and is kept out of the app. Fix in Power BI:
    `Unit Price = AVERAGE(FactSales[UnitPriceSAR])`, then run
    `scripts\sync_model_schema.py --write`.
-3. **Known weak questions:** ratios such as "units per order by channel"
-   fail validation; the `FactSales[Total Orders]` column (the same grand
-   total on every row) can mislead the planner; "net sales by month"
-   without a year adds the same month of all six years together.
+3. **Weak questions fixed (2026-11-17, after the snapshot tag):** ratios
+   ("units per order", "average order value") divide by orders (AOV was
+   computed as net sales / units); `FactSales[Total Orders]` is kept out of
+   the app by `scripts/sync_model_schema.py`; "by month" without a year
+   shows each month of each year (ask for the month of the year to combine
+   years); month, day and time columns are listed in time order. Note: in
+   the 2025 data as delivered some orders span several stores, so
+   per-region order counts add up to more than the distinct total.
 4. **Rules are fixed lists.** Wording the rules do not know falls back to
    the model and the answer checks. New phrases are added in
    `src/interpret.py` and `src/analysis.py`.

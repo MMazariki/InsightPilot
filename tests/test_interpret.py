@@ -174,7 +174,7 @@ def test_interpretation_can_be_switched_off():
 @pytest.mark.parametrize("question,expected", [
     ("How many orders by channel?", "Number of distinct orders by channel?"),
     ("Orders by region", "Number of distinct orders by region"),
-    ("Units per order by channel", "Units per order by channel"),
+    ("Units per order by channel", "Units sold divided by orders by channel"),
 ])
 def test_order_counts_are_read_as_distinct_orders(question, expected):
     assert interpret(question, TODAY)[0] == expected
@@ -211,3 +211,80 @@ def test_percentage_measures_are_shown_as_percent():
                                 [{"DimDate[Year]": 2025,
                                   "[Target Achievement %]": 0.9098}])
     assert "| 2025 | 91.0% |" in table
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("Average order value by region", "Net sales divided by orders by region"),
+    ("AOV by channel", "Net sales divided by orders by channel"),
+    ("Basket size by channel", "Units sold divided by orders by channel"),
+])
+def test_per_order_wording(question, expected):
+    assert interpret(question, TODAY)[0] == expected
+
+
+def test_per_order_ratio_divides_by_orders():
+    plan = _plan([], metrics=[{"alias": "Average Order Value", "expression": {
+        "kind": "divide",
+        "numerator": {"kind": "measure", "name": "Net Sales"},
+        "denominator": {"kind": "measure", "name": "Units Sold"}}}])
+    fixed, notes = normalize_plan(plan)
+    assert fixed["metrics"][0]["expression"]["denominator"]["column"] == "OrderID"
+    assert notes
+    good = _plan([], metrics=[{"alias": "Average Order Value", "expression": {
+        "kind": "divide",
+        "numerator": {"kind": "measure", "name": "Net Sales"},
+        "denominator": {"kind": "measure", "name": "Orders"}}}])
+    assert normalize_plan(good)[0] == good
+
+
+MONTH = {"table": "DimDate", "column": "MonthName"}
+
+
+def test_month_without_a_year_becomes_year_month():
+    plan = _plan([], group_by=[MONTH], order_by=[
+        {"field": "DimDate[MonthName]", "direction": "asc"}])
+    fixed, notes = normalize_plan(plan, "Net sales by month")
+    assert fixed["group_by"] == [{"table": "DimDate", "column": "YearMonth"}]
+    assert fixed["order_by"] == [{"field": "DimDate[YearMonth]", "direction": "asc"}]
+    assert notes
+
+
+@pytest.mark.parametrize("question", [
+    "Net sales by month of the year", "Seasonality of units by month",
+    "Net sales by month across all years",
+])
+def test_month_of_the_year_is_kept(question):
+    plan = _plan([], group_by=[MONTH])
+    assert normalize_plan(plan, question)[0] == plan
+
+
+def test_month_with_a_year_is_kept():
+    plan = _plan([{"type": "column", "table": "DimDate", "column": "Year",
+                   "operator": "eq", "value": 2025}], group_by=[MONTH])
+    assert normalize_plan(plan, "Net sales by month in 2025")[0] == plan
+
+
+def test_month_names_sort_in_calendar_order_even_when_sorted_by_name():
+    from src.structured_agent import _calendar_order
+    rows = [{"DimDate[MonthName]": m, "[Net Sales]": 1} for m in
+            ("April", "February", "January")]
+    plan = _plan([], group_by=[MONTH], order_by=[
+        {"field": "DimDate[MonthName]", "direction": "asc"}])
+    result = _calendar_order({"columns": ["DimDate[MonthName]", "[Net Sales]"],
+                              "rows": rows}, plan)
+    assert [r["DimDate[MonthName]"] for r in result["rows"]] == [
+        "January", "February", "April"]
+
+
+def test_time_columns_sort_in_time_order_without_an_order():
+    from src.structured_agent import _calendar_order
+    rows = [{"DimDate[YearMonth]": m, "[Net Sales]": 1} for m in
+            ("2025-01-01T00:00:00", "2021-03-01T00:00:00", "2021-01-01T00:00:00")]
+    plan = _plan([], group_by=[{"table": "DimDate", "column": "YearMonth"}])
+    result = _calendar_order({"columns": ["DimDate[YearMonth]", "[Net Sales]"],
+                              "rows": rows}, plan)
+    assert [r["DimDate[YearMonth]"][:7] for r in result["rows"]] == [
+        "2021-01", "2021-03", "2025-01"]
+    ranked = dict(plan, order_by=[{"field": "Net Sales", "direction": "desc"}])
+    assert _calendar_order({"columns": ["DimDate[YearMonth]", "[Net Sales]"],
+                            "rows": rows}, ranked)["rows"] == rows

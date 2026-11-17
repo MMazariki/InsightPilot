@@ -369,11 +369,6 @@
           "Type": "Text"
         },
         {
-          "Name": "Total Orders",
-          "Type": "Integer",
-          "FormatString": "0"
-        },
-        {
           "Name": "TotalQuantity",
           "Type": "Integer"
         }

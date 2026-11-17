@@ -94,6 +94,14 @@ SYNONYMS = [
     (r"(?:gross )?profit margins?", "gross margin %", '"profit margin" as gross margin %'),
     # quantities
     (r"(?:pieces|qty|volume|volumes)(?: sold)?", "units sold", None),
+    # per-order ratios: the planner otherwise divides by units
+    (r"(?:the )?(?:average order value|avg order value|aov|average basket value|"
+     r"basket value|average ticket|ticket size|net sales per order|"
+     r"revenue per order|sales per order)",
+     "net sales divided by orders", '"average order value" as net sales / orders'),
+    (r"(?:the )?(?:average basket size|basket size|units per order|"
+     r"items per order|average units per order)",
+     "units sold divided by orders", '"basket size" as units sold / orders'),
     # counting orders: the planner otherwise counts units
     (r"(?:how many|number of|count of|total number of|total|the)\s+orders"
      r"|^orders(?= by| per| in| for)",
@@ -258,6 +266,15 @@ def _split_year_month(plan):
 
 _ORDERS_ALIAS = re.compile(r"\border(?:s| count)\b", re.I)
 ORDER_COUNT = {"kind": "distinct_count", "table": "FactSales", "column": "OrderID"}
+_PER_ORDER_ALIAS = re.compile(
+    r"\bper order\b|\border value\b|\bbasket\b|\baov\b|\bticket\b", re.I)
+
+
+def _is_order_count(expression):
+    if expression.get("kind") == "measure":
+        return "order" in str(expression.get("name", "")).lower()
+    return (expression.get("kind") == "distinct_count"
+            and expression.get("column") == "OrderID")
 
 
 def _count_orders(plan):
@@ -269,6 +286,16 @@ def _count_orders(plan):
     metrics = []
     for metric in plan.get("metrics") or []:
         expression = metric.get("expression") or {}
+        alias = str(metric.get("alias", ""))
+        # "Average Order Value" / "Units per Order" computed with another
+        # denominator (Net Sales / Units Sold was seen): divide by orders.
+        if (_PER_ORDER_ALIAS.search(alias) and expression.get("kind") == "divide"
+                and not _is_order_count(expression.get("denominator") or {})):
+            metric = dict(metric, expression=dict(
+                expression, denominator=dict(ORDER_COUNT)))
+            changed = True
+            metrics.append(metric)
+            continue
         if (_ORDERS_ALIAS.search(str(metric.get("alias", "")))
                 and expression.get("kind") == "measure"
                 and "order" not in expression.get("name", "").lower()
@@ -305,19 +332,77 @@ def _dedupe_metrics(plan):
     return dict(plan, metrics=kept, order_by=order_by, filters=filters)
 
 
-def normalize_plan(plan):
+_MONTH_OF_YEAR = re.compile(
+    r"month of (?:the )?year|seasonal|seasonality|calendar month|month names?|"
+    r"across (?:all )?(?:the )?years|all years|every year|typical month|"
+    r"years combined", re.I)
+_YEAR_FIELDS = {"Year", "YearMonth", "Date"}
+
+
+def _months_per_year(plan, question):
+    """With several years of data, "net sales by month" grouped by month
+    name adds every year's March together. Unless the question asks for the
+    month of the year, show each month of each year (YearMonth). A month
+    filter without a year is kept but noted."""
+
+    if question and _MONTH_OF_YEAR.search(question):
+        return plan, None
+    groups = plan.get("group_by") or []
+    filters = plan.get("filters") or []
+    has_year = any(g["table"] == "DimDate" and g["column"] in _YEAR_FIELDS
+                   for g in groups) or any(
+        f.get("type") == "column" and f.get("table") == "DimDate"
+        and f.get("column") in _YEAR_FIELDS for f in filters)
+    if has_year:
+        return plan, None
+
+    month_groups = [g for g in groups if g["table"] == "DimDate"
+                    and g["column"] in ("MonthName", "MonthNumber")]
+    if month_groups:
+        year_month = {"table": "DimDate", "column": "YearMonth"}
+        new_groups = []
+        for g in groups:
+            if g in month_groups:
+                if year_month not in new_groups:
+                    new_groups.append(year_month)
+            else:
+                new_groups.append(g)
+        old_refs = {f"DimDate[{g['column']}]" for g in month_groups}
+        order_by = []
+        for item in plan.get("order_by") or []:
+            if item["field"] in old_refs:
+                item = dict(item, field="DimDate[YearMonth]")
+            if item not in order_by:
+                order_by.append(item)
+        return (dict(plan, group_by=new_groups, order_by=order_by),
+                "each month of each year is shown; ask for the month of the "
+                "year to combine years")
+
+    if any(f.get("type") == "column" and f.get("table") == "DimDate"
+           and f.get("column") in ("MonthName", "MonthNumber", "Quarter")
+           for f in filters):
+        return plan, ("all years are combined for that month or quarter; add "
+                      "a year to narrow it")
+    return plan, None
+
+
+def normalize_plan(plan, question=None):
     """Fix plan shapes that cannot answer what was asked. Returns
     ``(plan, notes)``; the plan is re-validated by the caller."""
 
     notes = []
     plan, recounted = _count_orders(plan)
     if recounted:
-        notes.append("orders are counted as distinct order IDs")
+        notes.append("orders are counted as distinct order IDs (also in "
+                     "per-order figures)")
     plan, split = _split_year_month(plan)
     plan, merged = merge_repeated_filters(plan)
     if merged:
         plan = _dedupe_metrics(plan)
         notes.append(merged)
+    plan, months = _months_per_year(plan, question)
+    if months:
+        notes.append(months)
     return plan, notes
 
 
