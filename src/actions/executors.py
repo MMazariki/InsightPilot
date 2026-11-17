@@ -125,7 +125,8 @@ def graph_token(kind, settings, token_provider=None):
     if not result or "access_token" not in result:
         # First use: one Microsoft consent window for the new permission.
         result = app.acquire_token_interactive(
-            scopes=SCOPES[kind], login_hint=username or None, prompt="select_account")
+            scopes=SCOPES[kind], login_hint=username or None, prompt="select_account",
+            timeout=300)        # an unanswered window must not hang the app
     if "access_token" not in result:
         raise ActionError("Microsoft sign-in for this action failed: "
                           + str(result.get("error_description", result.get("error", "")))[:300])
