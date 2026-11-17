@@ -66,6 +66,9 @@ def _format_value(value: Any, column: str | None = None) -> str:
             return day[:7] if label == "YearMonth" else day
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
+    # Percentage measures ("Target Achievement %") are fractions.
+    if label.endswith("%") and isinstance(value, (int, float)):
+        return f"{value * 100:,.1f}%"
     if isinstance(value, float):
         return f"{value:,.4f}" if abs(value) < 1 else f"{value:,.2f}"
     if isinstance(value, int):

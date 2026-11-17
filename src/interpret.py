@@ -75,6 +75,18 @@ SYNONYMS = [
     (r"(?:worst|weakest|poorest)[- ]performing", "lowest net sales",
      '"worst performing" as lowest net sales'),
     (r"performance", "net sales", '"performance" as net sales'),
+    # targets
+    (r"(?:missed|fell short of|was furthest below|is furthest below|"
+     r"under-?performed) (?:its |their |the )?targets?(?: (?:the )?most| by the most)?",
+     "had the lowest target achievement %",
+     '"missed its target the most" as lowest target achievement %'),
+    (r"(?:beat|exceeded|was furthest above|outperformed) (?:its |their |the )?"
+     r"targets?(?: (?:the )?most| by the most)?",
+     "had the highest target achievement %",
+     '"beat its target the most" as highest target achievement %'),
+    # "target vs net sales" lists two measures (not between two years)
+    (r"(?<!\d)\s+(?:vs\.?|versus|against|compared (?:to|with))\s+(?!\d)",
+     " and ", '"vs" as both measures side by side'),
     # money words
     (_NOT_AFTER_QUALIFIER + r"(?:sales )?(?:revenues?|turnover|income|earnings|takings|money|sales value)",
      "net sales", None),

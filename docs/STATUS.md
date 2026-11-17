@@ -19,12 +19,13 @@ Git tag: `snapshot-2026-11-17` (taken before the chart-for-every-question change
 
 ## Open items
 
-1. **Targets ignore dates (Power BI model).** `FactTarget` is related to
-   stores but not to dates, so target, variance and target-achievement
-   figures are six-year totals (2021-2026) whatever year or month is asked; every year shows the same target, 165,952,822 SAR. The user
-   chose to leave this for now. The fix is a month table in the model; the
-   app's `evaluation/semantic_model_schema.json` then needs the new
-   relationship.
+1. **Targets (resolved 2026-11-17).** Sales Target now uses TREATAS on
+   DimDate[YearMonth] and DimProduct[Category], Variance = [Sales Target] -
+   [Net Sales], and FactTarget.csv was rescaled by
+   `scripts/rescale_targets.py` to actual net sales plus 5-15% (about 91%
+   achievement; 2026 reads 79% because November and December are full-month
+   targets). Published values match the CSV. Unit Price still sums prices
+   and is kept out of the app.
 2. **Accuracy is unmeasured on the current data.** Everything in
    `docs/EVALUATION.md` was measured on the 2025-only dataset. Questions that
    span two years (for example "net sales by month" without a year) have

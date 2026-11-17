@@ -191,3 +191,23 @@ def test_metric_labelled_orders_is_recounted():
     ratio = _plan([], metrics=[{"alias": "Units per Order", "expression": {
         "kind": "measure", "name": "Units Sold"}}])
     assert normalize_plan(ratio)[0] == ratio
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("Sales target vs net sales by region in 2025",
+     "Sales target and net sales by region in 2025"),
+    ("Which category missed its target the most in 2026?",
+     "Which category had the lowest target achievement % in 2026?"),
+    ("Which store beat its target by the most?",
+     "Which store had the highest target achievement %?"),
+    ("Net sales 2025 vs 2026", "Net sales 2025 vs 2026"),  # years: growth
+])
+def test_target_wording(question, expected):
+    assert interpret(question, TODAY)[0] == expected
+
+
+def test_percentage_measures_are_shown_as_percent():
+    table = format_result_table(["DimDate[Year]", "[Target Achievement %]"],
+                                [{"DimDate[Year]": 2025,
+                                  "[Target Achievement %]": 0.9098}])
+    assert "| 2025 | 91.0% |" in table
