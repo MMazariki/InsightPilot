@@ -211,7 +211,10 @@ def insights(kind, runs):
         p = summary(kind, previous)
         delta = s["passed"] - p["passed"]
         fixed, broken = changes(previous, latest)
-        if runs[-1]["set"] == runs[-2]["set"]:
+        if runs[-1]["set"] == runs[-2]["set"] and not (delta or fixed or broken):
+            notes.append("Since the previous run: no change, the same questions "
+                         "passed (the results are reproducible at temperature 0).")
+        elif runs[-1]["set"] == runs[-2]["set"]:
             notes.append(f"Since the previous run: {delta:+d} passed"
                          + (f"; fixed {', '.join(fixed)}" if fixed else "")
                          + (f"; newly failing {', '.join(broken)}" if broken else "")

@@ -137,6 +137,16 @@ differences and add `--write` to make them available to questions (then
 restart the app). Check what a new measure computes first; `--skip "Name"`
 keeps one out.
 
+## Evaluation dashboard
+
+The chart button next to the gear (or <http://localhost:8501/?view=evaluation>)
+shows how often each assistant answers correctly on its fixed question set:
+headline scores, pass rate by question group (Power BI) or from search to
+cited answer (Documents), the trend across runs, plain-language insights,
+and the failed questions. **Rerun evaluation** runs a set again in the
+background with the current settings (several minutes, one at a time) and
+adds the result as a new run. Methods and caveats: `docs/EVALUATION.md`.
+
 ## Admin settings
 
 The gear button next to "New chat" (or <http://localhost:8501/?view=admin>)
