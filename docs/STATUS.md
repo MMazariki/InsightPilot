@@ -1,9 +1,10 @@
-# InsightPilot status snapshot, 2026-11-17 (evening)
+# InsightPilot status snapshot, 2026-11-17 (night)
 
-Git tag: `snapshot-2026-11-17c`. All 769 offline tests pass
+Git tag: `snapshot-2026-11-17d`. All 799 offline tests pass
 (`.venv\Scripts\python.exe -m pytest tests -q`). The app is running.
-Earlier tags: `snapshot-2026-11-17` (morning) and `snapshot-2026-11-17b`
-(evening, before the weak-spot fixes in item 3).
+Earlier tags the same day: `snapshot-2026-11-17` (morning),
+`snapshot-2026-11-17b` and `-c` (evening, before and after the weak-spot
+fixes in item 3).
 
 ## What exists and works
 
@@ -17,7 +18,7 @@ Earlier tags: `snapshot-2026-11-17` (morning) and `snapshot-2026-11-17b`
 | Charts in the report | Every answered question draws a visual from the checked plan (card, pie, donut, column, bar, line, combo, legend, 100% stacked share, table), with the answer's filters and top-N, at (0,0) at the full AI Canvas page size, replacing the previous one. Chart type selector (Auto, Pie, Donut, Column, Bar, Line) redraws without a new query | **User confirmed** the chart draws and fills the canvas in the signed-in report (2026-11-17). The selector was checked in the app; its redraw was not watched in the signed-in report. |
 | Report panel | Account chooser always shown, the query account suggested, signed-in account shown with a warning if different, "Use a different account"; side panes collapsed; AI Canvas page found by name | Panel loads in a browser; sign-in flow not watched by the developer |
 | Admin page | Models and providers, answer checks (incl. measure-name check and everyday wording, both on), Power BI, interface, voice | Live page. Cloud providers are unit-tested with fakes only. |
-| Documents page (RAG) | `?view=documents` or the Documents button: answers only from the PDFs in `documents\` (pypdf, `nomic-embed-text` + keyword search, `qwen2.5:7b-instruct`), cited by file and page, incremental indexing, Admin → Documents settings | Unit tests; retrieval and answers checked on the project's own docs converted to PDF. No user PDFs yet, so no measured accuracy. |
+| Documents page (RAG) | `?view=documents` or the Documents button. Answers only from the PDFs of the folder number entered (`documents\<number>`, or `?folder=` in the link); nothing without one. pypdf, `nomic-embed-text` + keyword search fused, `qwen2.5:7b-instruct`; every answer cites file and page; incremental indexing; per-folder library and history; Read aloud (browser speech, local voices); Admin → Documents settings | Unit tests incl. cross-folder isolation; live on the user's PDF in folder 102 and on the project guide as a PDF. Accuracy not measured. Read aloud not heard by the developer (needs a real click). |
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | User's own recordings transcribed |
 | Data | 1 Jan 2021 to 16 Nov 2026, 122,483 sales lines: 2021-2024 and 2026 generated, 2025 as delivered. Targets rescaled to actual sales + 5-15% | Published dataset matches the CSVs year by year (lines, net sales, orders, targets) |
 | Model | Measures synced by `scripts/sync_model_schema.py`: Cost, Quantity, Orders added; `TotalQuantity` column. Sales Target follows date and category (TREATAS); Variance = target - net sales; achievement about 91% (2026: 79%, November and December are full-month targets) | Live DAX checks against the CSVs |
@@ -55,6 +56,11 @@ Earlier tags: `snapshot-2026-11-17` (morning) and `snapshot-2026-11-17b`
 9. **Voice** is English only; `small.en` is the next step if words are
    misheard.
 
+10. **Documents page:** folder segregation separates answers but is not a
+    login (anyone using the app can type any folder number). Answer quality
+    depends on the 7B model (it once listed a diploma as a certification).
+    No measured question set exists yet for documents.
+
 ## Where things are
 
 * How to use and set up: `README.md`
@@ -65,6 +71,9 @@ Earlier tags: `snapshot-2026-11-17` (morning) and `snapshot-2026-11-17b`
 * Data scripts: `scripts/extend_sales_data.py` (2026),
   `scripts/add_history_years.py` (2021-2024), `scripts/rescale_targets.py`,
   `scripts/sync_model_schema.py` (model measures into the app)
+* Documents: PDFs in `documents\<folder number>\`, index in `rag_index\`
+  (both gitignored); design in `docs/RAG_PLAN.md`
+* LinkedIn post and screenshots: `docs/linkedin/`
 * Power BI file: `L:\Others\AgenticProject.pbix`
 * Settings and encrypted API keys: `config\` (not committed)
 * Logs: `logs\`

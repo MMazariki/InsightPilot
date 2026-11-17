@@ -5,6 +5,7 @@ Design: docs/RAG_PLAN.md. Has its own chat history, separate from the
 Power BI chat.
 """
 
+import html
 import json
 from pathlib import Path
 
@@ -71,7 +72,11 @@ def _render_answer(message, folder, show_excerpts, index, read_aloud=True):
         with st.expander("Show the passages used"):
             for s in sources:
                 st.markdown(f"**[{s['number']}] {s['file']}, {_pages(s)}**")
-                st.caption(s["text"])
+                # Shown as plain text: a passage may contain Markdown
+                # characters ("##", "*") that must not be rendered.
+                st.html('<div style="font-size:.85rem;color:#667085;'
+                        'white-space:pre-wrap;line-height:1.45">'
+                        + html.escape(s["text"]) + "</div>")
     files = sorted({s["file_key"] for s in sources})
     columns = st.columns(min(len(files), 3))
     for number, key in enumerate(files):
