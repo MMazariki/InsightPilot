@@ -159,6 +159,42 @@ def chart_preference(question):
     return visual_type, cleaned
 
 
+# Chart types offered by the selector above the report, by label.
+CHART_CHOICES = {
+    "Pie": "pieChart",
+    "Donut": "donutChart",
+    "Column": "clusteredColumnChart",
+    "Bar": "clusteredBarChart",
+    "Line": "lineChart",
+}
+
+
+def chart_choices(request):
+    """Labels of the chart types that can show ``request``'s fields: pie
+    and donut need one breakdown and one measure; a second breakdown
+    (legend) allows column, bar and line. Cards, tables and two-measure
+    combinations offer none."""
+
+    if not request:
+        return []
+    roles = [field["role"] for field in request.get("fields") or []]
+    if roles.count("Category") != 1 or roles.count("Y") != 1 \
+            or set(roles) - {"Category", "Y", "Series"}:
+        return []
+    if "Series" in roles:
+        return ["Column", "Bar", "Line"]
+    return list(CHART_CHOICES)
+
+
+def with_chart_type(request, label):
+    """A copy of ``request`` drawn as the chosen type (``None`` = as built)."""
+
+    new = dict(request)
+    if label in CHART_CHOICES:
+        new["visualType"] = CHART_CHOICES[label]
+    return new
+
+
 def _is_additive(target):
     name = target.get("measure")
     return bool(name) and "%" not in name and name not in NON_ADDITIVE_MEASURES

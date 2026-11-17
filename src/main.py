@@ -11,6 +11,7 @@ from src import voice
 from src import admin_page, agent_factory, report_pages
 import powerbi_embed_component as report_component
 from src import settings as app_settings
+from src.visual_builder import chart_choices, with_chart_type
 
 
 APP_NAME = "InsightPilot"
@@ -246,6 +247,8 @@ if "agent" not in st.session_state:
     st.session_state.agent = None
 if "visual_request" not in st.session_state:
     st.session_state.visual_request = None
+if "visual_built" not in st.session_state:
+    st.session_state.visual_built = None
 if "queued_prompt" not in st.session_state:
     st.session_state.queued_prompt = None
 if "voice_draft" not in st.session_state:
@@ -283,6 +286,16 @@ def queue_prompt(question):
 def reset_conversation():
     st.session_state.messages = []
     st.session_state.visual_request = None
+    st.session_state.visual_built = None
+
+
+def change_chart_type():
+    built = st.session_state.visual_built
+    if not built:
+        return
+    label = st.session_state.get("chart_type") or "Auto"
+    st.session_state.visual_request = {
+        **with_chart_type(built, label), "requestId": str(uuid.uuid4())}
 
 
 def open_admin():
@@ -593,6 +606,10 @@ with chat_column, st.container(border=True, key="chat_card"):
                                 **st.session_state.agent.pending_visual_request,
                                 "requestId": str(uuid.uuid4()),
                             }
+                            # The chart as built; the type selector redraws it.
+                            st.session_state.visual_built = dict(
+                                st.session_state.visual_request)
+                            st.session_state.chart_type = "Auto"
 
                             print(
                                 "[STREAMLIT] Visual request received:",
@@ -633,6 +650,18 @@ with report_column, st.container(border=True, key="report_card"):
     report_id = SETTINGS["powerbi"]["report_id"] or report_component.DEFAULT_REPORT_ID
     page_id = SETTINGS["powerbi"]["page_id"] or current_report_page(
         report_id, SETTINGS["powerbi"]["workspace_id"] or None)
+
+    # Chart type of the latest answer's visual: redraws it, no new query.
+    choices = chart_choices(st.session_state.visual_built)
+    if choices:
+        st.segmented_control(
+            "Chart type",
+            ["Auto"] + choices,
+            key="chart_type",
+            on_change=change_chart_type,
+            help="Auto is the chart chosen for the answer. Pie and donut are "
+                 "offered when the answer has one breakdown and one measure.",
+        )
 
     powerbi_embed_component(
         key="main-powerbi-report",

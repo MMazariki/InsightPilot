@@ -66,6 +66,9 @@ one. It is built from the checked query plan, not by a model:
   split or breakdown), otherwise a column, bar or line chart
   (column-and-line for two measures); two breakdowns use the second as the
   legend; three or more become a table;
+* the **Chart type** selector above the report (Auto, Pie, Donut, Column,
+  Bar, Line) redraws the latest answer's chart without asking again; pie
+  and donut appear when the answer has one breakdown and one measure;
 * you can name the chart: add "as a pie chart", "donut chart", "bar chart",
   "column chart" or "line chart" to the question; "create a chart of ..."
   without a type also works (the words are removed before the question is

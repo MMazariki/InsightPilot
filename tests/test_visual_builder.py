@@ -409,3 +409,31 @@ def test_agent_leaves_the_question_alone_when_charts_are_off():
         chat=lambda model, messages: json.dumps({"faithful": True, "reason": ""}))
     agent.ask("Net sales by region as a pie chart")
     assert seen["question"] == "Net sales by region as a pie chart"
+
+
+# ---- Chart type selector ---------------------------------------------
+
+from src.visual_builder import chart_choices, with_chart_type  # noqa: E402
+
+
+def _request(*roles, visual="clusteredColumnChart"):
+    target = {"table": "FactSales", "measure": "Net Sales"}
+    return {"visualType": visual,
+            "fields": [{"role": role, "target": target} for role in roles]}
+
+
+def test_chart_choices_follow_the_fields():
+    assert chart_choices(_request("Category", "Y")) == [
+        "Pie", "Donut", "Column", "Bar", "Line"]
+    assert chart_choices(_request("Category", "Series", "Y")) == [
+        "Column", "Bar", "Line"]
+    assert chart_choices(_request("Values", visual="card")) == []
+    assert chart_choices(_request("Category", "Y", "Y2")) == []
+    assert chart_choices(None) == []
+
+
+def test_with_chart_type():
+    built = _request("Category", "Y")
+    assert with_chart_type(built, "Pie")["visualType"] == "pieChart"
+    assert with_chart_type(built, "Auto") == built
+    assert built["visualType"] == "clusteredColumnChart"  # not modified
