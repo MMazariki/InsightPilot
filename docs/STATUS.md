@@ -22,7 +22,7 @@ its settings moved to Admin).
 | Documents page (RAG) | `?view=documents` or the Documents button. Answers only from the PDFs of the folder number entered (`documents\<number>`, or `?folder=` in the link); nothing without one. pypdf, `nomic-embed-text` + keyword search fused, `qwen2.5:7b-instruct`; every answer cites file and page; incremental indexing; per-folder library and history; Read aloud (browser speech, local voices); every parameter (models, answer instructions, search, follow-ups, indexing, page) set in Admin → Documents, with an automatic rebuild when an index-shaping setting changes | Unit tests incl. cross-folder isolation; live on the user's PDF in folder 102 and on the project guide as a PDF. Accuracy not measured. Read aloud not heard by the developer (needs a real click). |
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | User's own recordings transcribed |
 | Data | 1 Jan 2021 to 16 Nov 2026, 122,483 sales lines: 2021-2024 and 2026 generated, 2025 as delivered. Targets rescaled to actual sales + 5-15% | Published dataset matches the CSVs year by year (lines, net sales, orders, targets) |
-| Agent actions (`src/actions/`, `src/action_card.py`) | "Email this to Sara", "post this to Teams", "create a task for every store below 85%", "save this as Excel", also combined with a question. Drafted on an editable card; runs only on Approve, once; 15-minute expiry; address book and allowed domains only; content built by the app; daily caps; audit log; Admin → Actions (off by default) | 59 unit and page tests (fakes for Graph and Teams); pre-registered rules check 32 / 32 (`docs/EVALUATION.md` §3.6). **No real email, Teams post or To Do task sent yet**: needs the Graph permissions and a Teams webhook. The card was not looked at in a browser. |
+| Agent actions (`src/actions/`, `src/action_card.py`) | "Email this to Sara", "post this to Teams", "create a task for every store below 85%", "save this as Excel", also combined with a question. Drafted on an editable card; runs only on Approve, once; 15-minute expiry; address book and allowed domains only; content built by the app; daily caps; audit log; Admin → Actions (off by default) | 59 unit and page tests (fakes for Graph and Teams); pre-registered rules check 32 / 32 (`docs/EVALUATION.md` §3.6). **One real email sent** (SMTP, to the user's own address, approved on the card in the browser, 2026-11-18; user confirmed). No Teams post or To Do task (not available on the account, item 11). |
 | Model | Measures synced by `scripts/sync_model_schema.py`: Cost, Quantity, Orders added; `TotalQuantity` column. Sales Target follows date and category (TREATAS); Variance = target - net sales; achievement about 91% (2026: 79%, November and December are full-month targets) | Live DAX checks against the CSVs |
 
 ## Open items
@@ -72,8 +72,12 @@ its settings moved to Admin).
     and Teams is not available on the account type (switched off). Email is
     therefore set to go through the user's own account by SMTP (Gmail app
     password, to be entered in Admin → Actions), and tasks are saved as
-    calendar reminders (`.ics`). Still to do: enter the SMTP account,
-    address book and allowed domains, enable, send the first real test.
+    calendar reminders (`.ics`). **First real email sent 2026-11-18**: SMTP
+    account set up, actions enabled, "email this to me" drafted, approved
+    and sent from the chat card (audit log: drafted, approved, sent); the
+    user confirmed it works. Still to do: an `.ics` reminder and an export
+    from the real UI, and address book and allowed domains (empty, so only
+    "me" resolves).
     Detection is rules only: unknown wordings ("loop in Sara") are treated
     as questions.
 
