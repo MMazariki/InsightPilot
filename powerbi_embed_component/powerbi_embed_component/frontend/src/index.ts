@@ -381,8 +381,29 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
   const sameAccount = (a?: string, b?: string) =>
     !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
+  // MSAL marks a sign-in popup as "in progress" in sessionStorage. A popup
+  // lives only as long as the page that opened it, so a mark found when this
+  // page first creates MSAL is left over from a reloaded page or a closed
+  // popup, and would block every sign-in with "interaction_in_progress".
+  const clearStaleInteraction = () => {
+    try {
+      for (const key of Object.keys(window.sessionStorage)) {
+        if (key.startsWith("msal.") && key.endsWith("interaction.status")) {
+          window.sessionStorage.removeItem(key);
+        }
+      }
+    } catch (error) {
+      console.warn("Could not clear the old sign-in state:", error);
+    }
+  };
+
+  const isInteractionInProgress = (error: unknown) =>
+    (error as { errorCode?: string })?.errorCode === "interaction_in_progress" ||
+    String(error).includes("interaction_in_progress");
+
   const getAccessToken = async (chooseAccount = false): Promise<string> => {
     if (!msal) {
+      clearStaleInteraction();
       msal = new PublicClientApplication({
         auth: {
           clientId: data.clientId,
@@ -415,11 +436,21 @@ const MyComponent: FrontendRenderer<Record<string, never>, ComponentData> = (
     showStatus("Choose the Microsoft account that has Power BI...");
 
     const hint = currentData.loginHint || undefined;
-    const loginResult = await msal.loginPopup({
+    const request = {
       scopes: [POWERBI_SCOPE],
       prompt: "select_account",
       loginHint: chooseAccount ? undefined : hint,
-    });
+    };
+    let loginResult;
+    try {
+      loginResult = await msal.loginPopup(request);
+    } catch (error) {
+      // A sign-in left unfinished (popup closed, page reloaded): clear the
+      // mark and try once more.
+      if (!isInteractionInProgress(error)) throw error;
+      clearStaleInteraction();
+      loginResult = await msal.loginPopup(request);
+    }
 
     if (!loginResult.accessToken) {
       throw new Error(
