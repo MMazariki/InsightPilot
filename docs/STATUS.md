@@ -75,9 +75,9 @@ its settings moved to Admin).
     calendar reminders (`.ics`). **First real email sent 2026-11-18**: SMTP
     account set up, actions enabled, "email this to me" drafted, approved
     and sent from the chat card (audit log: drafted, approved, sent); the
-    user confirmed it works. Still to do: an `.ics` reminder and an export
-    from the real UI, and address book and allowed domains (empty, so only
-    "me" resolves).
+    user confirmed it works. A `.ics` reminder and an Excel export were also
+    run from the chat. Still to do: address book and allowed domains (empty,
+    so only "me" resolves).
     Detection is rules only: unknown wordings ("loop in Sara") are treated
     as questions.
 
