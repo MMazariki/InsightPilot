@@ -12,10 +12,11 @@ An alert is::
      "last_run": "2026-11-19", "last_status": "sent", "last_detail": "..."}
 
 Stored in ``config/alerts.json``; every check is logged in
-``logs/alerts.jsonl``. A background thread in the app server
-(``start_scheduler``) checks every minute and runs each enabled alert once a
-day, at or after its time, on its days. If the computer or the app was off
-at that time, the alert runs when the app is next running that day.
+``logs/alerts.jsonl``. A worker process (``scripts/alerts_worker.py``,
+started and stopped with the app server) checks every minute and runs each
+enabled alert once a day, at or after its time, on its days. If the
+computer or the app was off at that time, the alert runs when the app is
+next running that day.
 
 How a check works:
 
@@ -317,29 +318,45 @@ def run_due(now=None, **kwargs):
     return done
 
 
-class _Scheduler(threading.Thread):
-    def __init__(self, interval=60):
-        super().__init__(name="insightpilot-alerts", daemon=True)
-        self.interval = interval
-        self.started_at = dt.datetime.now()
-        self.last_tick = None
-        self.last_error = ""
-
-    def run(self):
-        while True:
-            self.last_tick = dt.datetime.now()
-            try:
-                run_due()
-                self.last_error = ""
-            except Exception as exc:          # never let the thread die
-                self.last_error = str(exc)[:300]
-            time.sleep(self.interval)
+HEARTBEAT = ROOT / "logs" / "alerts_worker.json"
 
 
-def start_scheduler():
-    """Start the background checker (once per server process; the caller
-    keeps it with ``st.cache_resource``)."""
+def work(interval=60, stop_flag=None, ticks=None):
+    """The checker loop of ``scripts/alerts_worker.py`` (a process of its
+    own, started with the app by ``InsightPilot-Server.ps1``, so alerts run
+    even when nobody has the app open). Writes a heartbeat each minute."""
 
-    scheduler = _Scheduler()
-    scheduler.start()
-    return scheduler
+    started = dt.datetime.now().isoformat(timespec="seconds")
+    count = 0
+    while not (stop_flag and Path(stop_flag).exists()):
+        error = ""
+        try:
+            run_due()
+        except Exception as exc:              # never let the loop die
+            error = str(exc)[:300]
+        beat = {"pid": os.getpid(), "started": started,
+                "last_tick": dt.datetime.now().isoformat(timespec="seconds"),
+                "last_error": error}
+        try:
+            HEARTBEAT.parent.mkdir(parents=True, exist_ok=True)
+            HEARTBEAT.write_text(json.dumps(beat), encoding="utf-8")
+        except OSError:
+            pass
+        count += 1
+        if ticks is not None and count >= ticks:
+            return
+        time.sleep(interval)
+
+
+def worker_status(now=None):
+    """``{"running": bool, "last_tick": datetime|None, "last_error": str}``:
+    running means a heartbeat in the last three minutes."""
+
+    now = now or dt.datetime.now()
+    try:
+        beat = json.loads(HEARTBEAT.read_text(encoding="utf-8"))
+        tick = dt.datetime.fromisoformat(beat["last_tick"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"running": False, "last_tick": None, "last_error": ""}
+    return {"running": (now - tick).total_seconds() < 180, "last_tick": tick,
+            "last_error": beat.get("last_error", "")}

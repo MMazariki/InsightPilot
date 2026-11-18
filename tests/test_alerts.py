@@ -160,6 +160,29 @@ def test_run_due_runs_once_a_day(tmp_path, monkeypatch):
     assert len(sent) == 1
 
 
+def test_worker_loop_writes_a_heartbeat(monkeypatch):
+    calls = []
+    monkeypatch.setattr(alerts, "run_due", lambda: calls.append(1))
+    assert not alerts.worker_status()["running"]
+    alerts.work(interval=0, ticks=2)
+    assert len(calls) == 2
+    status = alerts.worker_status()
+    assert status["running"] and status["last_error"] == ""
+    later = dt.datetime.now() + dt.timedelta(minutes=5)
+    assert not alerts.worker_status(later)["running"]
+
+
+def test_worker_survives_an_error_and_stops_on_the_flag(monkeypatch, tmp_path):
+    def boom():
+        raise RuntimeError("Ollama is down")
+    monkeypatch.setattr(alerts, "run_due", boom)
+    alerts.work(interval=0, ticks=1)
+    assert alerts.worker_status()["last_error"] == "Ollama is down"
+    flag = tmp_path / "stop.flag"
+    flag.write_text("stop")
+    alerts.work(interval=0, stop_flag=flag)          # returns at once
+
+
 # ------------------------------------------------------------------- page
 
 @pytest.fixture
@@ -192,6 +215,7 @@ def test_bell_opens_alerts_and_a_new_alert_is_saved(make_app):
     app.run()
     app.button(key="open_alerts").click().run()
     assert not app.exception and app.session_state.view == "alerts"
+    assert any("not running" in w.value for w in app.warning)     # no worker in tests
     app.text_input(key="alert_new_name").set_value("Below target")
     app.text_input(key="alert_new_question").set_value("Target achievement % by store")
     app.text_input(key="alert_new_condition").set_value("below 80%")

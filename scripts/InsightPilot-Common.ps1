@@ -52,7 +52,8 @@ function Stop-IPServer {
         $_.ProcessId -ne $PID -and $_.CommandLine -and (
             ($_.CommandLine -match 'InsightPilot-Server\.ps1') -or
             ($_.Name -match '^python(w)?\.exe$' -and
-             $_.CommandLine -match 'streamlit\s+run\s+src[/\\]main\.py')
+             ($_.CommandLine -match 'streamlit\s+run\s+src[/\\]main\.py' -or
+              $_.CommandLine -match 'alerts_worker\.py'))
         )
     } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue

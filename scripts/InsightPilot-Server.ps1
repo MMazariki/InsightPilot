@@ -52,9 +52,29 @@ $streamlitArgs = @(
 
 Write-ServerLog "Server supervisor started (agent: $env:INSIGHTPILOT_AGENT)."
 
+# Alerts run in a process of their own, so they work even when nobody has
+# the app open. Started when none is running (the worker also refuses to
+# run twice: it holds a lock). A failure here never stops the app.
+function Start-AlertsWorker {
+    try {
+        $running = Get-CimInstance Win32_Process | Where-Object {
+            $_.Name -match '^python(w)?\.exe$' -and $_.CommandLine -and
+            $_.CommandLine -match 'alerts_worker\.py' }
+        if ($running) { return }
+        Start-Process -FilePath $IPPython -ArgumentList @('scripts/alerts_worker.py') `
+            -WorkingDirectory $IPRoot -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $IPLogDir 'alerts_worker.log') `
+            -RedirectStandardError (Join-Path $IPLogDir 'alerts_worker.err.log') | Out-Null
+        Write-ServerLog 'Alerts worker started.'
+    } catch {
+        Write-ServerLog "Alerts worker could not start: $($_.Exception.Message)"
+    }
+}
+
 try {
     while (-not (Test-Path $IPStopFlag)) {
         Start-OllamaIfNeeded
+        Start-AlertsWorker
 
         $out = Join-Path $IPLogDir 'app.out.log'
         $err = Join-Path $IPLogDir 'app.err.log'

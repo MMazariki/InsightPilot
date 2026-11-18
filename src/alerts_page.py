@@ -170,7 +170,7 @@ def _alert_card(alert, settings, secrets, self_address, me, now):
                 st.rerun()
 
 
-def render(me, scheduler=None, now=None):
+def render(me, now=None):
     now = now or dt.datetime.now()
     settings = app_settings.load()
     secrets = app_settings.load_secrets()
@@ -195,15 +195,20 @@ def render(me, scheduler=None, now=None):
     if not (actions["enabled"] and actions["kinds"].get("email")):
         st.warning("Email actions are switched off in Admin → Actions, so alerts cannot "
                    "send anything (Test still works).", icon=":material/mail_lock:")
-    if scheduler is not None:
-        alive = scheduler.is_alive()
-        st.caption(("Checking every minute while the app is running"
-                    if alive else "The background checker is not running: restart the app")
-                   + (f" · last check {scheduler.last_tick:%H:%M}" if scheduler.last_tick
-                      else "")
-                   + (f" · error: {scheduler.last_error}" if scheduler.last_error else "")
-                   + ". If the computer is off at an alert's time, it runs when the app is "
-                   "next running that day.")
+    worker = alerts.worker_status(now)
+    message = ("Alerts are checked every minute while InsightPilot is running"
+               + (f" (last check {worker['last_tick']:%H:%M})" if worker["last_tick"] else "")
+               + ". If the computer is off at an alert's time, it runs when the app is "
+               "next running that day.")
+    if worker["running"]:
+        st.caption(message + (f" Last error: {worker['last_error']}"
+                              if worker["last_error"] else ""))
+    else:
+        st.warning("The alerts checker is not running, so alerts will not be sent. Use "
+                   "the Restart InsightPilot shortcut (it starts the checker with the "
+                   "app)." + (f" Last check: {worker['last_tick']:%Y-%m-%d %H:%M}."
+                              if worker["last_tick"] else ""),
+                   icon=":material/notifications_off:")
 
     with st.expander("New alert", icon=":material/add_alert:", expanded=not alerts.load()):
         values = _form("alert_new", {"time": "08:00", "days": [0, 1, 2, 3, 6],

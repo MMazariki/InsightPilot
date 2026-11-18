@@ -275,9 +275,12 @@ meets a condition.
   Each email is still checked like a chat action: address book or allowed
   domains, the sending account, and the daily email limit, which it shares
   with chat emails.
-* **The app checks every minute while it is running.** If the computer is
-  off at an alert's time, the alert runs when the app is next running that
-  day.
+* **Checked every minute** by a small worker process
+  (`scripts\alerts_worker.py`). It starts and stops with the app, so alerts
+  run even when nobody has the app open. If the computer is off at an
+  alert's time, the alert runs when the app is next running that day. The
+  Alerts page warns if the worker is not running; its output is in
+  `logs\alerts_worker.log`.
 
 ## Evaluation dashboard
 

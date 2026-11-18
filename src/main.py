@@ -285,17 +285,6 @@ if "view" not in st.session_state:
                              ("admin", "documents", "evaluation", "access", "alerts")
                              else "chat")
 
-
-@st.cache_resource(show_spinner=False)
-def alert_scheduler():
-    """The alerts checker: one background thread per server process."""
-    from src import alerts
-
-    return alerts.start_scheduler()
-
-
-ALERTS = alert_scheduler()
-
 # Rebuild the agent when the saved settings or API keys change.
 SETTINGS_STAMP = app_settings.stamp()
 if st.session_state.get("settings_stamp") != SETTINGS_STAMP:
@@ -584,7 +573,7 @@ if st.session_state.view == "alerts":
     from src import alerts_page
 
     with st.container(border=True, key="alerts_card"):
-        alerts_page.render(CURRENT_USER["username"], ALERTS)
+        alerts_page.render(CURRENT_USER["username"])
     st.stop()
 
 
