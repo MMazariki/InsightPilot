@@ -399,11 +399,38 @@ def _months_per_year(plan, question):
     return plan, None
 
 
+def _percent_aliases(plan):
+    """A percentage measure named without "%" ("Target Achievement" for
+    [Target Achievement %], seen 2026-11-19) loses its % formatting (0.8811
+    instead of 88.1%) and cannot be matched by "below 80%". Keep the %."""
+
+    alias_map = {}
+    metrics = []
+    for metric in plan.get("metrics") or []:
+        expression = metric.get("expression") or {}
+        alias = str(metric.get("alias", ""))
+        if (expression.get("kind") == "measure"
+                and str(expression.get("name", "")).rstrip().endswith("%")
+                and not alias.rstrip().endswith("%")):
+            new = (alias.rstrip() + " %") if alias.strip() else expression["name"]
+            alias_map[alias] = new
+            metric = dict(metric, alias=new)
+        metrics.append(metric)
+    if not alias_map:
+        return plan
+    order_by = [dict(i, field=alias_map.get(i["field"], i["field"]))
+                for i in plan.get("order_by") or []]
+    filters = [dict(f, alias=alias_map.get(f.get("alias"), f.get("alias")))
+               if f.get("type") == "metric" else f for f in plan.get("filters") or []]
+    return dict(plan, metrics=metrics, order_by=order_by, filters=filters)
+
+
 def normalize_plan(plan, question=None):
     """Fix plan shapes that cannot answer what was asked. Returns
     ``(plan, notes)``; the plan is re-validated by the caller."""
 
     notes = []
+    plan = _percent_aliases(plan)
     plan, recounted = _count_orders(plan)
     if recounted:
         notes.append("orders are counted as distinct order IDs (also in "

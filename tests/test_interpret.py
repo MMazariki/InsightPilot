@@ -102,6 +102,21 @@ def test_year_month_text_is_split(value, expected):
     compile_query_plan(fixed)
 
 
+def test_percent_measure_keeps_its_percent_sign():
+    plan = _plan([], metrics=[{"alias": "Target Achievement", "expression": {
+        "kind": "measure", "name": "Target Achievement %"}}],
+        order_by=[{"field": "Target Achievement", "direction": "desc"}])
+    fixed, _ = normalize_plan(plan)
+    assert fixed["metrics"][0]["alias"] == "Target Achievement %"
+    assert fixed["order_by"][0]["field"] == "Target Achievement %"
+    # Already right, or not a percentage: unchanged.
+    for alias, name in [("Target Achievement %", "Target Achievement %"),
+                        ("Revenue", "Net Sales")]:
+        same = _plan([], metrics=[{"alias": alias, "expression": {
+            "kind": "measure", "name": name}}])
+        assert normalize_plan(same)[0]["metrics"][0]["alias"] == alias
+
+
 def test_date_text_becomes_a_dax_date():
     assert column_literal("DimDate", "Date", "2026-11-16") == "DATE(2026, 11, 16)"
     assert column_literal("DimDate", "YearMonth", "2026-10") == "DATE(2026, 10, 1)"
