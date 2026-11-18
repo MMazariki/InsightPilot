@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from src.actions import render
+from src.actions import chart, render
 
 ROOT = Path(__file__).resolve().parents[2]
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -174,6 +174,18 @@ def _attachment(draft):
             "vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+def _chart(draft):
+    """The chart picture for an email, or ``None`` (switched off on the
+    card, no chartable answer, or drawing failed: the email goes without)."""
+
+    if not draft.get("chart", True):
+        return None
+    try:
+        return chart.chart_png(draft["context"])
+    except Exception:
+        return None
+
+
 def smtp_message(draft, settings):
     from email.message import EmailMessage
     from email.utils import formataddr, make_msgid
@@ -187,8 +199,16 @@ def smtp_message(draft, settings):
     message["Message-ID"] = make_msgid(domain=actions["smtp_username"].rsplit("@", 1)[-1])
     message.set_content(render.email_text(draft["context"], draft.get("note", "")) + "\n\n"
                         + render.footer(draft["context"]))
-    message.add_alternative(render.email_html(draft["context"], draft.get("note", "")),
-                            subtype="html")
+    picture = _chart(draft)
+    cid = make_msgid(domain="insightpilot.local") if picture else None
+    message.add_alternative(render.email_html(
+        draft["context"], draft.get("note", ""), cid[1:-1] if cid else None,
+        chart.alt_text(draft["context"])), subtype="html")
+    if picture:
+        # The picture travels inside the HTML part (multipart/related), so
+        # mail clients show it in the body, not as a separate file.
+        message.get_payload()[1].add_related(picture, maintype="image", subtype="png",
+                                             cid=cid, filename="chart.png")
     attachment = _attachment(draft)
     if attachment:
         name, data, subtype = attachment
@@ -261,18 +281,27 @@ def run_email_graph(draft, settings, token_provider=None, http=None, **_):
     except Exception as exc:
         return {"ok": False, "detail": str(exc)[:300]}
     context = draft["context"]
+    picture = _chart(draft)
+    cid = "chart@insightpilot" if picture else None
     message = {
         "subject": draft["subject"],
-        "body": {"contentType": "HTML", "content": render.email_html(context, draft.get("note", ""))},
+        "body": {"contentType": "HTML", "content": render.email_html(
+            context, draft.get("note", ""), cid, chart.alt_text(context))},
         "toRecipients": [{"emailAddress": {"address": r["email"], "name": r["name"]}}
                          for r in draft["recipients"]],
     }
+    files = []
+    if picture:
+        files.append({"@odata.type": "#microsoft.graph.fileAttachment", "name": "chart.png",
+                      "contentType": "image/png", "isInline": True, "contentId": cid,
+                      "contentBytes": base64.b64encode(picture).decode("ascii")})
     attachment = _attachment(draft)
     if attachment:
         name, data, _subtype = attachment
-        message["attachments"] = [{
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            "name": name, "contentBytes": base64.b64encode(data).decode("ascii")}]
+        files.append({"@odata.type": "#microsoft.graph.fileAttachment",
+                      "name": name, "contentBytes": base64.b64encode(data).decode("ascii")})
+    if files:
+        message["attachments"] = files
     http = http or requests
     try:
         response = http.post(f"{GRAPH}/me/sendMail", json={"message": message,

@@ -18,7 +18,7 @@ from pathlib import Path
 import streamlit as st
 
 from src import settings as app_settings
-from src.actions import address_book, service
+from src.actions import address_book, chart, service
 from src.actions import render as content
 from src.actions.validate import problems
 
@@ -146,7 +146,7 @@ def _edits(draft):
 
     state = st.session_state
     edits = {}
-    for name in ("subject", "note", "attach", "format", "extra", "recipients"):
+    for name in ("subject", "note", "attach", "chart", "format", "extra", "recipients"):
         if _k(draft, name) in state:
             edits[name] = state[_k(draft, name)]
     if _k(draft, "tasks") in state:
@@ -235,6 +235,9 @@ def render(draft, settings, self_address):
             if context["rows"]:
                 st.checkbox(f"Attach the table as {draft['format'].upper()}",
                             value=draft.get("attach", False), key=_k(draft, "attach"))
+            if chart.series(context):
+                st.checkbox("Include a chart picture in the email",
+                            value=draft.get("chart", True), key=_k(draft, "chart"))
         elif kind == "teams_post":
             channel = settings["actions"].get("teams_channel_label") or "the configured channel"
             st.caption(f"Posts to {channel}.")
@@ -274,6 +277,11 @@ def render(draft, settings, self_address):
                                      or "nobody yet"))
                 st.caption("Subject: " + preview["subject"])
                 st.html(content.email_html(context, preview["note"]))
+                if preview.get("chart", True):
+                    picture = _chart_picture(context)
+                    if picture:
+                        st.caption("In the email, this chart is shown above the table:")
+                        st.image(picture, width=560)
             elif kind == "teams_post":
                 st.markdown(f"**{preview['subject']}**")
                 if preview["note"]:
@@ -301,6 +309,20 @@ def render(draft, settings, self_address):
                           use_container_width=True)
     # The user has now seen this exact card; only now can it be approved.
     draft["shown"] = True
+
+
+def _chart_picture(context):
+    """The chart for the preview, drawn once per answer (kept in the session)."""
+
+    cache = st.session_state.setdefault("action_chart_cache", {})
+    key = id(context)
+    if key not in cache:
+        cache.clear()
+        try:
+            cache[key] = chart.chart_png(context)
+        except Exception:
+            cache[key] = None
+    return cache[key]
 
 
 def _table(context, limit):

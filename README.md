@@ -206,6 +206,12 @@ After a data answer, ask in the chat:
 * or both at once: "Email net sales by region in 2025 to Layla" (answered
   first, then drafted)
 
+**Emails show a chart picture** above the table when the answer has
+labels and numbers (2 to 25 rows): a bar chart drawn on this computer
+(Pillow), declines in red. It is shown in the email body, not as a separate
+file, and can be switched off on the card ("Include a chart picture"). The
+card's preview shows it.
+
 Or use the **buttons under the latest data answer**: **Email**, **Excel**,
 **Reminder** (**To Do task** when tasks go to To Do) and **Teams**. Only
 the kinds switched on in Admin → Actions are shown, and only to users with

@@ -316,7 +316,7 @@ def test_graph_mail_sends_to_resolved_recipients_only(tmp_path):
     message = kwargs["json"]["message"]
     assert [r["emailAddress"]["address"] for r in message["toRecipients"]] == [
         "ahmed@company.com"]
-    assert message["attachments"][0]["name"].endswith(".xlsx")
+    assert any(a["name"].endswith(".xlsx") for a in message["attachments"])
 
 
 def test_graph_403_explains_consent(tmp_path):
@@ -367,6 +367,53 @@ def test_smtp_sends_html_with_attachment(tmp_path):
     assert "text/html" in parts and "text/plain" in parts
     assert any(p.get_filename() and p.get_filename().endswith(".xlsx")
                for p in message.walk())
+
+
+def test_chart_picture_is_drawn_only_when_it_helps():
+    from src.actions import chart
+
+    png = chart.chart_png(CONTEXT)
+    assert png.startswith(b"\x89PNG") and len(png) < 300_000
+    assert chart.alt_text(CONTEXT) == "Bar chart: Target Achievement % by Store Name"
+    one_row = {**CONTEXT, "rows": CONTEXT["rows"][:1]}
+    assert chart.chart_png(one_row) is None
+    no_label = {**CONTEXT, "columns": ["[Net Sales]"], "rows": [{"[Net Sales]": 1.0},
+                                                                 {"[Net Sales]": 2.0}]}
+    assert chart.chart_png(no_label) is None
+    negative = {**CONTEXT, "rows": [dict(r, **{"[Target Achievement %]": -0.2})
+                                    for r in CONTEXT["rows"]]}
+    assert chart.chart_png(negative).startswith(b"\x89PNG")
+
+
+def test_smtp_email_shows_the_chart_in_the_body(tmp_path):
+    _Smtp.sent = []
+    settings = _smtp_settings()
+    draft, _ = _draft("email this to Ahmed", tmp_path, settings)
+    assert executors.run_email(draft, settings, secrets={"smtp_password": "app"},
+                               smtp_factory=_Smtp)["ok"]
+    message = _Smtp.sent[0]
+    images = [p for p in message.walk() if p.get_content_type() == "image/png"]
+    assert len(images) == 1
+    cid = images[0]["Content-ID"].strip("<>")
+    html_part = next(p for p in message.walk() if p.get_content_type() == "text/html")
+    assert f'src="cid:{cid}"' in html_part.get_content()
+    assert any(p.get_content_type() == "multipart/related" for p in message.walk())
+    # Switched off on the card: no picture.
+    _Smtp.sent = []
+    draft2, _ = _draft("email this to Ahmed", tmp_path, settings)
+    service.apply_edits(draft2, {"chart": False}, settings)
+    executors.run_email(draft2, settings, secrets={"smtp_password": "app"}, smtp_factory=_Smtp)
+    assert not [p for p in _Smtp.sent[0].walk() if p.get_content_type() == "image/png"]
+
+
+def test_graph_email_sends_the_chart_inline(tmp_path):
+    draft, settings = _draft("email this to Ahmed", tmp_path)
+    http = _Http(_Response(202))
+    assert executors.run_email(draft, settings, token_provider=lambda s: "T", http=http)["ok"]
+    message = http.calls[0][2]["json"]["message"]
+    inline = [a for a in message["attachments"] if a.get("isInline")]
+    assert len(inline) == 1 and inline[0]["contentType"] == "image/png"
+    assert f'cid:{inline[0]["contentId"]}' in message["body"]["content"]
 
 
 def test_smtp_auth_failure_explains_app_password(tmp_path):

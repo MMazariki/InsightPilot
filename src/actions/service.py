@@ -91,6 +91,8 @@ def apply_edits(draft, edits, settings, self_address=""):
         draft["note"] = (edits["note"] or "").strip()
     if "attach" in edits:
         draft["attach"] = bool(edits["attach"])
+    if "chart" in edits:
+        draft["chart"] = bool(edits["chart"])
     if edits.get("format") in ("xlsx", "csv"):
         draft["format"] = edits["format"]
         if draft["kind"] == "export":

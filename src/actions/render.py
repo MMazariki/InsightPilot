@@ -89,7 +89,10 @@ def footer(context):
 
 # ------------------------------------------------------------ email
 
-def email_html(context, note=""):
+def email_html(context, note="", chart_cid=None, chart_alt=""):
+    """The email body. ``chart_cid``: the Content-ID of the chart picture
+    sent with the email (``src/actions/chart.py``), shown above the table."""
+
     e = html.escape
     rows = context["rows"]
     head = "".join(
@@ -107,6 +110,10 @@ def email_html(context, note=""):
         parts.append(f"<p>{e(note)}</p>")
     parts.append(f"<p><b>{e(context.get('question') or 'Answer')}</b></p>")
     parts.append(f"<p>{e(summary(context))}</p>")
+    if chart_cid:
+        parts.append(f'<p><img src="cid:{e(chart_cid)}" width="720" alt="{e(chart_alt)}" '
+                     'style="max-width:100%;height:auto;border:1px solid #E4E7EC;'
+                     'border-radius:8px"></p>')
     if rows:
         parts.append('<table style="border-collapse:collapse;font-family:Segoe UI,'
                      f'Arial,sans-serif;font-size:13px"><tr>{head}</tr>{body}</table>')
