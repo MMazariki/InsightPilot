@@ -104,18 +104,19 @@ def quick_kinds(settings):
     return [o for o in offered if actions["kinds"].get(o[0])]
 
 
-def button_request(kind):
+def button_request(kind, self_address=""):
     """The same draft request a typed message would give, for a button:
-    no recipients (chosen on the card), Excel, no due date."""
+    email to yourself ("me", changed on the card), Excel, no due date."""
 
-    return {"kind": kind, "question": None, "recipients": [], "note": "",
+    recipients = ["me"] if kind == "email" and self_address else []
+    return {"kind": kind, "question": None, "recipients": recipients, "note": "",
             "format": "xlsx", "per_row": False, "row_filter": None,
             "task_text": "", "due": None}
 
 
 def _click_quick(kind, label, settings, self_address):
     st.session_state.messages.append(start(
-        button_request(kind), f"[{label} button]", settings, self_address))
+        button_request(kind, self_address), f"[{label} button]", settings, self_address))
 
 
 def quick_buttons(settings, self_address, key):

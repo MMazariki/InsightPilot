@@ -284,6 +284,16 @@ def test_documents_user_sees_only_assigned_folders(make_app):
     box = app.selectbox(key="doc_folder_input")
     assert list(box.options) == ["102", "103"]
     assert not [b for b in app.button if b.key == "doc_back"]
+    # Indexing works on every folder: only for the Admin page permission.
+    assert not {b.key for b in app.button} & {"doc_index", "doc_rebuild"}
+
+
+def test_index_buttons_for_admins(make_app):
+    app = make_app()
+    app.session_state.view = "documents"
+    app.run()
+    assert not app.exception
+    assert {"doc_index", "doc_rebuild"} <= {b.key for b in app.button}
 
 
 def test_documents_link_to_another_folder_is_ignored(make_app):

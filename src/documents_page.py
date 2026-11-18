@@ -278,37 +278,43 @@ def render(settings, user):
     with library_column, st.container(border=True, key="doc_library"):
         st.html('<div class="ip-card-title">Library'
                 + (f" · folder {folder_id}" if folder_id else "") + '</div>')
-        st.caption(f"Documents folder: `{folder}`. Put each group of PDFs in its "
-                   "own subfolder, for example `documents\\102`.")
+        # Indexing covers every folder, so its buttons and counts are only for
+        # users with the Admin page permission; the others see their folders.
+        manage = auth_users.can(user, "admin_settings")
+        if manage:
+            st.caption(f"Documents folder: `{folder}`. Put each group of PDFs in its "
+                       "own subfolder, for example `documents\\102`.")
         notice = st.session_state.pop("doc_notice", None)
         if notice:
             st.success(notice, icon=":material/check_circle:")
 
-        # Indexing covers every folder; only counts are shown here.
         files, work = service.pending()
         changes = len(work["new"]) + len(work["changed"]) + len(work["deleted"])
         progress_slot = st.empty()
         can_index = installed is not None and config["embedding_model"] not in missing
-        if service.needs_rebuild():
-            st.warning("The search settings changed in Admin (model, passage "
-                       "size or text extraction): every PDF is indexed again.",
-                       icon=":material/autorenew:")
-        elif changes:
-            st.caption(", ".join(f"{len(work[k])} {k}" for k in
-                                 ("new", "changed", "deleted") if work[k])
-                       + " file(s) since the last indexing.")
-        index_now = st.button("Index now" if changes else "Index is up to date",
-                              key="doc_index", type="primary" if changes else "secondary",
-                              disabled=not (changes and can_index),
-                              icon=":material/sync:", use_container_width=True)
-        # New or changed files are indexed automatically once per session.
+        index_now = False
+        if manage:
+            if service.needs_rebuild():
+                st.warning("The search settings changed in Admin (model, passage "
+                           "size or text extraction): every PDF is indexed again.",
+                           icon=":material/autorenew:")
+            elif changes:
+                st.caption(", ".join(f"{len(work[k])} {k}" for k in
+                                     ("new", "changed", "deleted") if work[k])
+                           + " file(s) since the last indexing.")
+            index_now = st.button("Index now" if changes else "Index is up to date",
+                                  key="doc_index", type="primary" if changes else "secondary",
+                                  disabled=not (changes and can_index),
+                                  icon=":material/sync:", use_container_width=True)
+        # New or changed files are indexed automatically once per session
+        # (an Admin setting), whoever opens the page.
         auto = (changes and can_index and config["auto_index"]
                 and not st.session_state.get("doc_auto_done"))
         if index_now or auto:
             st.session_state.doc_auto_done = True
             _run_index(service, False, progress_slot)
 
-        loose = service.unfoldered()
+        loose = service.unfoldered() if manage else []
         if loose:
             st.warning(f"{len(loose)} PDF(s) are directly in the documents folder, "
                        "not in a numbered subfolder, so they are never searched.",
@@ -348,11 +354,12 @@ def render(settings, user):
                     st.multiselect("Search only in", indexed, key=f"doc_filter_{folder_id}",
                                    format_func=lambda k: k.split("/", 1)[1],
                                    placeholder="All documents in this folder")
-        with st.expander("Rebuild the whole index"):
-            st.caption("Reads every PDF in every folder again. Changing the "
-                       "search settings in Admin triggers this by itself.")
-            if st.button("Rebuild", key="doc_rebuild", disabled=not can_index):
-                _run_index(service, True, progress_slot)
+        if manage:
+            with st.expander("Rebuild the whole index"):
+                st.caption("Reads every PDF in every folder again. Changing the "
+                           "search settings in Admin triggers this by itself.")
+                if st.button("Rebuild", key="doc_rebuild", disabled=not can_index):
+                    _run_index(service, True, progress_slot)
 
     # -------------------------------------------------------------- chat
     with chat_column, st.container(border=True, key="doc_chat_card"):

@@ -123,13 +123,13 @@ def test_buttons_under_the_answer_open_the_same_card(make_app, tmp_path):
     app.button(key=f"act_{draft['id']}_approve").click().run()
     assert len(list((tmp_path / "exports").glob("*.xlsx"))) == 1
 
-    # Email: no recipient until one is chosen on the card.
+    # Email: addressed to yourself, ready to approve; others chosen on the card.
     _quick(app)["email"].click().run()
     email = next(d for d in app.session_state.action_drafts.values() if d["kind"] == "email")
-    assert email["recipients"] == []
-    assert app.button(key=f"act_{email['id']}_approve").disabled
-    app.multiselect(key=f"act_{email['id']}_recipients").set_value(["sara@company.com"]).run()
+    assert [r["email"] for r in email["recipients"]] == ["me@company.com"]
     assert not app.button(key=f"act_{email['id']}_approve").disabled
+    app.multiselect(key=f"act_{email['id']}_recipients").set_value([]).run()
+    assert app.button(key=f"act_{email['id']}_approve").disabled
 
 
 def test_buttons_follow_the_switches(make_app):
