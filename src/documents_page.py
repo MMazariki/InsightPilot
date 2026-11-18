@@ -129,7 +129,7 @@ def _question_input(folder_id, folder_ready, history):
 
     placeholder = (f"Ask a question about folder {folder_id}"
                    + (", or use the microphone..." if enabled else "...")
-                   if folder_ready else "Enter a folder number first")
+                   if folder_ready else "Choose a folder first")
     if enabled:
         submission = st.chat_input(placeholder, key="doc_chat_input",
                                    disabled=not folder_ready, accept_audio=True,
@@ -188,7 +188,12 @@ def _run_index(service, rebuild, slot):
     st.rerun()
 
 
-def render(settings):
+def render(settings, user):
+    """``user``: the signed-in user (``src.security``); only the folders
+    assigned to them can be chosen and searched."""
+
+    from src.security import login as auth
+    from src.security import users as auth_users
     from src.settings import DEFAULTS
 
     config = {**DEFAULTS["documents"], **settings["documents"]}
@@ -197,9 +202,18 @@ def render(settings):
     folder.mkdir(parents=True, exist_ok=True)
     histories = st.session_state.setdefault("doc_histories", {})
 
-    # The folder number can come from the link: ?view=documents&folder=102
+    on_disk = [p.name for p in folder.iterdir()
+               if p.is_dir() and auth_users.FOLDER_ID.fullmatch(p.name)]
+    choices = auth_users.allowed_folders(user, on_disk)
+
+    # The folder can come from the link (?view=documents&folder=102), only
+    # if this user may open it.
     if "doc_folder_input" not in st.session_state:
-        st.session_state.doc_folder_input = st.query_params.get("folder", "")
+        linked = st.query_params.get("folder", "")
+        st.session_state.doc_folder_input = (
+            linked if linked in choices else (choices[0] if len(choices) == 1 else None))
+    if st.session_state.doc_folder_input not in choices:
+        st.session_state.doc_folder_input = None
 
     # ------------------------------------------------------------ header
     title, folder_box, new_chat, back = st.columns(
@@ -207,19 +221,26 @@ def render(settings):
     with title:
         st.html('<div class="ip-card-title" style="font-size:1.25rem">Ask your '
                 'documents</div><div class="ip-card-sub">Each folder is separate: '
-                'answers come only from the PDFs of the folder number you enter, '
+                'answers come only from the PDFs of the folder you choose, '
                 'with the file and page of every source.</div>')
     with folder_box:
-        typed = st.text_input("Folder number", key="doc_folder_input",
-                              placeholder="e.g. 102",
-                              help="Required. Only the PDFs in documents\\<number> "
-                                   "are searched.")
+        picked = st.selectbox("Folder", choices, key="doc_folder_input",
+                              placeholder="Choose a folder" if choices
+                              else "No folders assigned",
+                              disabled=not choices,
+                              help="Only the folders an administrator assigned to "
+                                   "you. Only the PDFs in documents\\<folder> are "
+                                   "searched.")
 
     folder_id, folder_error = None, None
     try:
-        folder_id = clean_folder_id(typed)
+        folder_id = clean_folder_id(picked)
     except FolderError as exc:
         folder_error = str(exc)
+    # Checked again here, not only by the list: the answer must never come
+    # from a folder this user may not open.
+    if folder_id and not auth_users.folder_allowed(user, folder_id):
+        folder_id, folder_error = None, "You do not have access to that folder."
     if folder_id and st.query_params.get("folder") != folder_id:
         st.query_params["folder"] = folder_id
     messages = histories.setdefault(folder_id or "", [])
@@ -230,11 +251,14 @@ def render(settings):
             histories[folder_id or ""] = []
             st.rerun()
     with back:
-        if st.button("Back to Power BI", key="doc_back", icon=":material/arrow_back:",
-                     use_container_width=True):
-            st.session_state.view = "chat"
-            st.query_params.clear()
-            st.rerun()
+        if auth_users.can(user, "power_bi"):
+            if st.button("Back to Power BI", key="doc_back", icon=":material/arrow_back:",
+                         use_container_width=True):
+                st.session_state.view = "chat"
+                st.query_params.clear()
+                st.rerun()
+        else:
+            auth.account_menu(user, "acct_docs")
 
     installed = _installed_models(config["ollama_url"])
     missing = [] if installed is None else [
@@ -294,7 +318,9 @@ def render(settings):
         if folder_error:
             st.error(folder_error, icon=":material/error:")
         elif not folder_id:
-            st.info("Enter a folder number above to see and search its documents.",
+            st.info("Choose a folder above to see and search its documents."
+                    if choices else "No document folders are assigned to your "
+                    "account. Ask an administrator (Users and folder access).",
                     icon=":material/folder:")
         else:
             library = service.library(folder_id)
@@ -345,10 +371,11 @@ def render(settings):
                             st.session_state.doc_queued = example
                             st.rerun()
                 else:
-                    st.html('<div class="ip-welcome"><h3>Enter a folder number</h3>'
+                    st.html('<div class="ip-welcome"><h3>Choose a folder</h3>'
                             '<p>Questions are answered only from the PDFs of the '
-                            'folder you enter (for example <b>102</b> for '
-                            '<code>documents\\102</code>).</p></div>')
+                            'folder you choose (for example <b>102</b> for '
+                            '<code>documents\\102</code>). You see only the folders '
+                            'assigned to you.</p></div>')
             for index, message in enumerate(messages):
                 if message["role"] == "user":
                     with st.chat_message("user", avatar=":material/person:"):

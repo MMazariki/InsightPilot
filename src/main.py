@@ -9,6 +9,8 @@ import streamlit as st
 from powerbi_embed_component import powerbi_embed_component
 from src import voice
 from src import action_card, admin_page, agent_factory, report_pages
+from src.security import login as auth
+from src.security import users as auth_users
 from src.actions import detect as action_detect
 import powerbi_embed_component as report_component
 from src import settings as app_settings
@@ -272,7 +274,7 @@ action_card.init_state()
 if "view" not in st.session_state:
     requested_view = st.query_params.get("view")
     st.session_state.view = (requested_view if requested_view in
-                             ("admin", "documents", "evaluation") else "chat")
+                             ("admin", "documents", "evaluation", "access") else "chat")
 
 # Rebuild the agent when the saved settings or API keys change.
 SETTINGS_STAMP = app_settings.stamp()
@@ -318,6 +320,10 @@ def open_documents():
 
 def open_evaluation():
     st.session_state.view = "evaluation"
+
+
+def open_access():
+    st.session_state.view = "access"
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -460,7 +466,38 @@ st.html(
 """
 )
 
-if not online:
+
+# =====================================================
+# SIGN-IN AND PERMISSIONS (src/security)
+# =====================================================
+
+# Draws the first-admin, sign-in or new-password screen and stops the run
+# until someone is signed in.
+CURRENT_USER = auth.require()
+
+
+def allowed(permission):
+    return auth_users.can(CURRENT_USER, permission)
+
+
+# Each page needs one of the permissions an administrator assigns.
+VIEW_PERMISSION = {"chat": "power_bi", "documents": "documents",
+                   "evaluation": "evaluation", "admin": "admin_settings",
+                   "access": "manage_users"}
+if not allowed(VIEW_PERMISSION[st.session_state.view]):
+    usable = [v for v in ("chat", "documents", "access", "admin", "evaluation")
+              if allowed(VIEW_PERMISSION[v])]
+    if not usable:
+        left, middle, right = st.columns([1, 1.25, 1])
+        with middle, st.container(border=True):
+            st.warning("Your account has no pages assigned yet. Ask an "
+                       "administrator to give you a permission.",
+                       icon=":material/lock:")
+            auth.account_menu(CURRENT_USER, "acct_none")
+        st.stop()
+    st.session_state.view = usable[0]
+
+if not online and st.session_state.view == "chat":
     st.warning(
         "The local model service (Ollama) is not responding, so questions "
         "cannot be answered yet. Start Ollama, or use the Restart "
@@ -482,13 +519,25 @@ if st.session_state.view == "admin":
 
 
 # =====================================================
+# USERS AND FOLDER ACCESS
+# =====================================================
+
+if st.session_state.view == "access":
+    from src import access_page
+
+    with st.container(border=True, key="access_card"):
+        access_page.render(SETTINGS, CURRENT_USER["username"])
+    st.stop()
+
+
+# =====================================================
 # DOCUMENTS PAGE (answers from PDFs)
 # =====================================================
 
 if st.session_state.view == "documents":
     from src import documents_page
 
-    documents_page.render(SETTINGS)
+    documents_page.render(SETTINGS, CURRENT_USER)
     st.stop()
 
 
@@ -520,8 +569,9 @@ chat_column, report_column = st.columns(
 
 with chat_column, st.container(border=True, key="chat_card"):
 
-    title_column, docs_column, action_column, eval_column, admin_column = st.columns(
-        [2.3, 1.1, 1, 0.34, 0.34], vertical_alignment="center")
+    (title_column, docs_column, action_column, eval_column, admin_column,
+     users_column, account_column) = st.columns(
+        [2.3, 1.1, 1, 0.34, 0.34, 0.34, 0.9], vertical_alignment="center")
     with title_column:
         st.html(
             '<div class="ip-card-title">Ask InsightPilot</div>'
@@ -529,14 +579,15 @@ with chat_column, st.container(border=True, key="chat_card"):
             "discounts and targets.</div>"
         )
     with docs_column:
-        st.button(
-            "Documents",
-            key="open_documents",
-            icon=":material/description:",
-            help="Ask questions answered from your PDF documents",
-            on_click=open_documents,
-            use_container_width=True,
-        )
+        if allowed("documents"):
+            st.button(
+                "Documents",
+                key="open_documents",
+                icon=":material/description:",
+                help="Ask questions answered from your PDF documents",
+                on_click=open_documents,
+                use_container_width=True,
+            )
     with action_column:
         st.button(
             "New chat",
@@ -547,23 +598,37 @@ with chat_column, st.container(border=True, key="chat_card"):
             use_container_width=True,
         )
     with eval_column:
-        st.button(
-            "",
-            key="open_evaluation",
-            icon=":material/monitoring:",
-            help="Evaluation dashboard: measured accuracy, insights and reruns",
-            on_click=open_evaluation,
-            use_container_width=True,
-        )
+        if allowed("evaluation"):
+            st.button(
+                "",
+                key="open_evaluation",
+                icon=":material/monitoring:",
+                help="Evaluation dashboard: measured accuracy, insights and reruns",
+                on_click=open_evaluation,
+                use_container_width=True,
+            )
     with admin_column:
-        st.button(
-            "",
-            key="open_admin",
-            icon=":material/settings:",
-            help="Admin settings: models, checks, Power BI, interface",
-            on_click=open_admin,
-            use_container_width=True,
-        )
+        if allowed("admin_settings"):
+            st.button(
+                "",
+                key="open_admin",
+                icon=":material/settings:",
+                help="Admin settings: models, checks, Power BI, interface",
+                on_click=open_admin,
+                use_container_width=True,
+            )
+    with users_column:
+        if allowed("manage_users"):
+            st.button(
+                "",
+                key="open_access",
+                icon=":material/manage_accounts:",
+                help="Users and folder access: accounts, permissions, document folders",
+                on_click=open_access,
+                use_container_width=True,
+            )
+    with account_column:
+        auth.account_menu(CURRENT_USER, "acct_chat")
 
     chat_container = st.container(
         height=SETTINGS["interface"]["chat_height"], border=False,
@@ -679,7 +744,9 @@ with chat_column, st.container(border=True, key="chat_card"):
                 with st.chat_message("assistant", avatar=":material/explore:"):
                     render_answer(message["content"])
                     draft = st.session_state.action_drafts.get(message.get("action_id"))
-                    if draft:
+                    # A permission removed meanwhile hides the card, so
+                    # nothing can be approved without it.
+                    if draft and allowed("actions"):
                         action_card.render(draft, SETTINGS, ACTION_SELF)
                     # Suggested rephrasings of a declined question, as
                     # buttons on the latest answer only.
@@ -714,7 +781,16 @@ with chat_column, st.container(border=True, key="chat_card"):
                 if question:
                     answered = answer_question(question)
                 if action_request is not None:
-                    if question and not answered:
+                    if not allowed("actions"):
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": "That looks like a request to "
+                                       + action_card.service.KIND_LABELS[
+                                           action_request["kind"]].lower()
+                                       + ". Your account is not allowed to run "
+                                       "actions (email, reminders, exports), so "
+                                       "nothing was drafted. Ask an administrator."})
+                    elif question and not answered:
                         st.session_state.messages.append({
                             "role": "assistant",
                             "content": "There is no data answer above to "

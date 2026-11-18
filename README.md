@@ -18,6 +18,51 @@ background while you are signed in to Windows.
 The app address is <http://localhost:8501>. It is reachable from this
 computer only.
 
+## Sign-in, users and folder access
+
+Everyone signs in (`src/security/`).
+
+* **First run:** when no account exists, the app asks to **create the
+  administrator account**. That account has every permission and every
+  document folder.
+* **Users and folder access** (the people icon next to the gear, for users
+  with that permission) has four tabs:
+  * **Users:** add a user (a temporary password is shown once; they choose
+    their own at the first sign-in), and edit, deactivate, unlock, reset
+    the password or delete a user.
+  * **Document folders:** a grid of folders × users. Tick who may open each
+    folder; you can also create a folder there.
+  * **Sign-in policy** and the **Security log**.
+* **Permissions** are assigned per user. Each one opens a part of the app;
+  the buttons and pages a user may not use are hidden, and opening them by
+  link sends the user back.
+
+  | Permission | Opens |
+  |---|---|
+  | Power BI | the main chat and report |
+  | Documents | the Documents page, only the folders assigned to the user |
+  | Actions | email, reminders and exports from the chat |
+  | Evaluation | the evaluation dashboard |
+  | Admin page | Admin settings (models, checks, Power BI, actions) |
+  | Users & folders | the Users and folder access page |
+
+* **Passwords** are stored as salted scrypt hashes in `config\users.json`
+  (not committed); never in clear and never in a log.
+* **Lockout:** after 5 failed sign-ins the account is locked for 15 minutes.
+* **Idle sign-out** after 8 hours. Reloading the browser tab asks to sign
+  in again.
+* All of these limits can be changed under Sign-in policy.
+* The app always keeps at least one active account that can manage users;
+  you cannot delete, deactivate or demote yourself.
+* **Forgotten administrator password:** run
+  `.venv\Scripts\python.exe scripts\reset_user_password.py <username>`
+  on this PC. It sets a temporary password that must be changed at sign-in.
+* **Limits:** this protects the app on this PC (it listens on `localhost`
+  only). The PDFs, settings and logs are ordinary files, so anyone with
+  access to the Windows account can still read them. Power BI queries run
+  as the one configured Power BI account for every user. Email actions go
+  from the one configured email account.
+
 ## Asking in your own words
 
 Before a question is planned, everyday wording is read into the model's
@@ -65,13 +110,13 @@ its sources, shows the passages used, and offers the PDF to open. When the
 documents do not cover a question, it says so instead of guessing.
 
 * **Folders are separate.** Put each group of PDFs in its own numbered
-  subfolder (for example `documentsB`). A question is answered only from
-  the folder number entered in **Folder number** (or passed in the link:
-  <http://localhost:8501/?view=documents&folder=102>); without a valid number
-  nothing is searched. The library, sources and chat history show only that
-  folder. PDFs placed directly in `documents` are never searched. This
-  separates answers; it is not a login, so anyone using the app can type
-  any folder number.
+  subfolder (for example `documents\102`). A question is answered only from
+  the folder chosen in **Folder**, and the list holds only the folders an
+  administrator assigned to the signed-in user (see "Sign-in, users and
+  folder access" above). A link such as
+  <http://localhost:8501/?view=documents&folder=102> opens that folder only
+  if it is assigned to the user. The library, sources and chat history show
+  only that folder. PDFs placed directly in `documents` are never searched.
 * **Adding files:** copy PDFs into a folder under `documents`. New,
   changed and deleted files are indexed when the page opens, or with
   **Index now**. Only text PDFs are read; scanned PDFs are listed as "no

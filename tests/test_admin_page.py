@@ -232,7 +232,9 @@ def app(tmp_path, monkeypatch):
     from pathlib import Path
 
     main = Path(__file__).resolve().parents[1] / "src" / "main.py"
-    return AppTest.from_file(str(main), default_timeout=30)
+    from tests.conftest import sign_in
+
+    return sign_in(AppTest.from_file(str(main), default_timeout=30))
 
 
 def test_gear_button_opens_admin_and_back_returns(app):

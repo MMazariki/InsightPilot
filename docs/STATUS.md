@@ -23,6 +23,7 @@ its settings moved to Admin).
 | Voice input | Microphone in the question box, local whisper.cpp (`base.en`), review-then-send | User's own recordings transcribed |
 | Data | 1 Jan 2021 to 16 Nov 2026, 122,483 sales lines: 2021-2024 and 2026 generated, 2025 as delivered. Targets rescaled to actual sales + 5-15% | Published dataset matches the CSVs year by year (lines, net sales, orders, targets) |
 | Agent actions (`src/actions/`, `src/action_card.py`) | "Email this to Sara", "post this to Teams", "create a task for every store below 85%", "save this as Excel", also combined with a question. Drafted on an editable card; runs only on Approve, once; 15-minute expiry; address book and allowed domains only; content built by the app; daily caps; audit log; Admin → Actions (off by default) | 59 unit and page tests (fakes for Graph and Teams); pre-registered rules check 32 / 32 (`docs/EVALUATION.md` §3.6). **Tested by hand in the browser, 2026-11-18:** an email (SMTP, to the user's own address; user confirmed it arrived), a calendar reminder (`.ics`, Friday read correctly, alert 09:00) and an Excel export, each drafted, approved and logged. The export showed percentages as text; fixed so they are numbers. No Teams post or To Do task (not available on the account, item 11). |
+| Sign-in and access (`src/security/`, `src/access_page.py`) | Added 2026-11-19. First-run administrator account. Every page needs a sign-in. Six permissions per user (Power BI, Documents, Actions, Evaluation, Admin page, Users & folders). Documents folders assigned per user (grid), with only assigned folders listable or searchable. scrypt password hashes; lockout; idle sign-out; forced change of temporary passwords; security log `logs\security.jsonl`; recovery script `scripts\reset_user_password.py` | 24 unit and page tests (AppTest), 895 tests in all. **Not yet used in a browser:** the first administrator account is created at the next visit to the app. |
 | Model | Measures synced by `scripts/sync_model_schema.py`: Cost, Quantity, Orders added; `TotalQuantity` column. Sales Target follows date and category (TREATAS); Variance = target - net sales; achievement about 91% (2026: 79%, November and December are full-month targets) | Live DAX checks against the CSVs |
 
 ## Open items
@@ -61,8 +62,9 @@ its settings moved to Admin).
 9. **Voice** is English only; `small.en` is the next step if words are
    misheard.
 
-10. **Documents page:** folder segregation separates answers but is not a
-    login (anyone using the app can type any folder number). Answer quality
+10. **Documents page:** folders are now assigned per signed-in user
+    (2026-11-19). The files themselves are plain files on disk, readable by
+    anyone with the Windows account. Answer quality
     depends on the 7B model (it once listed a diploma as a certification).
     No measured question set exists yet for documents.
 11. **Agent actions on this machine (2026-11-18).** Graph consent for
