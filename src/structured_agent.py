@@ -239,6 +239,7 @@ class StructuredPlanningAgent:
 
         raw = self.generate(self.model, question, self.instructions)
         trace["stages"].append("planner")
+        raw = self._fix_column_measures(raw, trace)
         try:
             response = self._parse(raw)
         except ValueError as first_error:
@@ -257,7 +258,7 @@ class StructuredPlanningAgent:
             ]
             repaired = self.chat(self.model, messages)
             trace["stages"].append("repair")
-            response = self._parse(repaired)
+            response = self._parse(self._fix_column_measures(repaired, trace))
 
         if response["kind"] == "plan" and self.options["answerability_check"]:
             result = gate(
@@ -288,6 +289,19 @@ class StructuredPlanningAgent:
                         "plan": response["plan"],
                         "no_metric": bool(result.get("no_metric_reference"))}
         return response
+
+    def _fix_column_measures(self, raw, trace):
+        """A fact column named as a measure ("SalesTargetSAR") becomes the
+        measure ("Sales Target") before the plan is checked."""
+
+        if not self.options["interpret_wording"]:
+            return raw
+        from src.interpret import fix_column_measures
+
+        raw, replaced = fix_column_measures(raw)
+        if replaced:
+            trace["stages"].append("column_measure:" + ",".join(replaced))
+        return raw
 
     def _gate_vocabulary(self):
         """Model words, plus neutral verbs when wording is interpreted."""
@@ -410,7 +424,7 @@ class StructuredPlanningAgent:
                               if not n.startswith(("each month", "all years"))]
             if fixed != plan:
                 try:
-                    validate_query_plan(fixed)
+                    validate_query_plan(fixed, allow_in=True)
                     plan = fixed
                     trace["stages"].append("plan_adjusted")
                 except ValueError:
@@ -421,7 +435,7 @@ class StructuredPlanningAgent:
 
             adjusted, _ = adjust_plan(plan, spec)
             try:
-                validate_query_plan(adjusted)
+                validate_query_plan(adjusted, allow_in=True)
             except ValueError as exc:
                 trace["stages"].append("analysis_invalid")
                 self.last_result = {"kind": "failed", "error": str(exc)}

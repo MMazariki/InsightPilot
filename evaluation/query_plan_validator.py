@@ -19,12 +19,42 @@ def load_model():
     return json.loads(MODEL_SCHEMA_FILE.read_text(encoding="utf-8-sig"))
 
 
-def validate_query_plan(plan):
-    """Validate query-plan structure and semantic-model references."""
+def _with_in_operator(contract):
+    """The plan contract plus an ``in`` column filter (a list of values).
+
+    Only the app's own plan fixes use it (``src/interpret.py``: "compare
+    2025 and 2026" keeps exactly those years). The planner never sees it:
+    its prompt and its plans use the unchanged contract.
+    """
+
+    def walk(node):
+        if isinstance(node, dict):
+            props = node.get("properties") or {}
+            if props.get("type") == {"const": "column"} and "operator" in props:
+                props["operator"] = {"enum": props["operator"]["enum"] + ["in"]}
+                props["value"] = {"anyOf": [
+                    props["value"],
+                    {"type": "array", "minItems": 1,
+                     "items": {"type": ["string", "number", "boolean"]}}]}
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(contract)
+    return contract
+
+
+def validate_query_plan(plan, allow_in=False):
+    """Validate query-plan structure and semantic-model references.
+    ``allow_in``: also accept the app's internal ``in`` column filter."""
 
     contract = json.loads(
         (EVAL / "query_plan_schema.json").read_text(encoding="utf-8-sig")
     )
+    if allow_in:
+        contract = _with_in_operator(contract)
 
     validator = Draft202012Validator(contract)
     errors = sorted(
@@ -133,14 +163,20 @@ def validate_query_plan(plan):
             condition["table"], condition["column"]
         )
 
-        if column_type == "Boolean":
-            valid = type(value) is bool and operator in ("eq", "ne")
-        elif column_type in ("Integer", "Double", "Decimal"):
-            valid = type(value) in (int, float)
-        elif column_type in ("Text", "DateTime"):
-            valid = isinstance(value, str)
+        def value_ok(item):
+            if column_type == "Boolean":
+                return type(item) is bool and operator in ("eq", "ne", "in")
+            if column_type in ("Integer", "Double", "Decimal"):
+                return type(item) in (int, float)
+            if column_type in ("Text", "DateTime"):
+                return isinstance(item, str)
+            return False
+
+        if operator == "in":
+            valid = (allow_in and isinstance(value, list) and bool(value)
+                     and all(value_ok(item) for item in value))
         else:
-            valid = False
+            valid = not isinstance(value, list) and value_ok(value)
 
         if not valid:
             raise ValueError(

@@ -45,7 +45,6 @@ def test_interpret_rewrites(question, expected):
 @pytest.mark.parametrize("question", [
     "Net sales by region",
     "Gross profit by year",
-    "Discounts given per order",
     "Units sold by category",
     "Sales target by store",
     "How many sales transactions were there?",
@@ -81,7 +80,9 @@ def test_compare_two_years_becomes_a_breakdown():
         metrics=[{"alias": "Sales 2025", "expression": {"kind": "measure", "name": "Net Sales"}},
                  {"alias": "Sales 2026", "expression": {"kind": "measure", "name": "Net Sales"}}])
     fixed, notes = normalize_plan(plan)
-    assert fixed["filters"] == []
+    # Only the two years compared (APP1-014 showed all six).
+    assert fixed["filters"] == [{"type": "column", "table": "DimDate", "column": "Year",
+                                 "operator": "in", "value": [2025, 2026]}]
     assert fixed["group_by"] == [{"table": "DimDate", "column": "Year"}]
     assert fixed["metrics"] == [{"alias": "Net Sales", "expression": {
         "kind": "measure", "name": "Net Sales"}}]
@@ -100,6 +101,66 @@ def test_year_month_text_is_split(value, expected):
     fixed, _ = normalize_plan(plan)
     assert [(f["column"], f["value"]) for f in fixed["filters"]] == expected
     compile_query_plan(fixed)
+
+
+def test_compare_two_years_keeps_only_those_years():
+    plan = _plan([{"type": "column", "table": "DimDate", "column": "Year",
+                   "operator": "eq", "value": 2021},
+                  {"type": "column", "table": "DimDate", "column": "Year",
+                   "operator": "eq", "value": 2024}])
+    fixed, notes = normalize_plan(plan)
+    assert fixed["group_by"] == [{"table": "DimDate", "column": "Year"}]
+    assert fixed["filters"] == [{"type": "column", "table": "DimDate", "column": "Year",
+                                 "operator": "in", "value": [2021, 2024]}]
+    dax = compile_query_plan(fixed)
+    assert "'DimDate'[Year] IN {2021, 2024}" in dax
+
+
+def test_internal_in_filter_is_not_open_to_the_planner():
+    from evaluation.query_plan_validator import validate_query_plan
+
+    plan = _plan([{"type": "column", "table": "DimDate", "column": "Year",
+                   "operator": "in", "value": [2025, 2026]}])
+    with pytest.raises(ValueError):
+        validate_query_plan(plan)                       # the planner's contract
+    validate_query_plan(plan, allow_in=True)            # the app's own fixes
+    with pytest.raises(ValueError):
+        validate_query_plan(_plan([{"type": "column", "table": "DimDate",
+                                    "column": "Year", "operator": "in",
+                                    "value": ["2025"]}]), allow_in=True)
+
+
+@pytest.mark.parametrize("question,dropped", [
+    ("Units sold by category in 2025", True),
+    ("Gross profit by brand", True),
+    ("Units sold by category by month in 2025", False),
+    ("Quarterly net sales", False),
+    ("Net sales trend", False),
+    ("Units sold by category in March 2025", False),
+])
+def test_unasked_month_grouping_is_dropped(question, dropped):
+    plan = _plan([], group_by=[{"table": "DimProduct", "column": "Category"},
+                               {"table": "DimDate", "column": "YearMonth"}],
+                 order_by=[{"field": "DimDate[YearMonth]", "direction": "asc"}])
+    fixed, notes = normalize_plan(plan, question)
+    columns = [g["column"] for g in fixed["group_by"]]
+    assert ("YearMonth" not in columns) == dropped
+    if dropped:
+        assert fixed["order_by"] == [] and any("not asked" in n for n in notes)
+
+
+def test_discount_verbs_and_column_measures():
+    from src.interpret import fix_column_measures
+
+    text, notes = interpret("Discounts given per channel in 2024", TODAY)
+    assert text == "Total discounts by channel in 2024" and notes
+    assert interpret("Total discounts by region", TODAY)[0] == "Total discounts by region"
+    raw = ('{"metrics": [{"alias": "Target", "expression": {"kind": "measure", '
+           '"name": "SalesTargetSAR"}}], "group_by": [{"table": "FactTarget", '
+           '"column": "SalesTargetSAR"}]}')
+    fixed, found = fix_column_measures(raw)
+    assert found == ["SalesTargetSAR"]
+    assert '"name": "Sales Target"' in fixed and '"column": "SalesTargetSAR"' in fixed
 
 
 def test_percent_measure_keeps_its_percent_sign():

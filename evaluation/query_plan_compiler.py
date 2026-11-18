@@ -87,7 +87,9 @@ def compile_expression(expression):
 def compile_query_plan(plan):
     """Compile a validated structured query plan into one DAX result table."""
 
-    validate_query_plan(plan)
+    # The planner's own plans were already checked against the plain
+    # contract; the app's plan fixes may add an ``in`` column filter.
+    validate_query_plan(plan, allow_in=True)
 
     metrics = plan["metrics"]
     dimensions = plan["group_by"]
@@ -138,6 +140,12 @@ def compile_query_plan(plan):
                 condition["column"],
             )
 
+            if condition["operator"] == "in":
+                values = ", ".join(
+                    column_literal(condition["table"], condition["column"], v)
+                    for v in condition["value"])
+                expressions.append(f"{reference} IN {{{values}}}")
+                continue
             expressions.append(
                 reference
                 + " "

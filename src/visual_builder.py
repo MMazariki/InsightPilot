@@ -249,11 +249,11 @@ def _filters(plan, targets_by_alias, category, notes):
         else:
             target = {"table": item["table"], "column": item["column"]}
 
-        if operator in ("eq", "ne") and item.get("type") != "metric":
+        if operator in ("eq", "ne", "in") and item.get("type") != "metric":
             filters.append({
                 "kind": "basic", "target": target,
-                "operator": "In" if operator == "eq" else "NotIn",
-                "values": [item["value"]],
+                "operator": "NotIn" if operator == "ne" else "In",
+                "values": list(item["value"]) if operator == "in" else [item["value"]],
             })
         elif operator in ADVANCED_OPERATORS:
             value = item["value"]

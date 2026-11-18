@@ -94,6 +94,10 @@ SYNONYMS = [
     (r"(?:gross )?profit margins?", "gross margin %", '"profit margin" as gross margin %'),
     # quantities
     (r"(?:pieces|qty|volume|volumes)(?: sold)?", "units sold", None),
+    # "discounts given / granted / offered" is the Total Discounts measure
+    # (APP1-013: "given" sent a clear question to the verifier, declined)
+    (r"(?<!total )discounts?(?: (?:given|granted|offered|provided|applied|made|"
+     r"handed out))?", "total discounts", '"discounts given" as total discounts'),
     # per-order ratios: the planner otherwise divides by units
     (r"(?:the )?(?:average order value|avg order value|aov|average basket value|"
      r"basket value|average ticket|ticket size|net sales per order|"
@@ -151,6 +155,8 @@ look looks like see tell know want need chart charts graph graphs plot
 visual visualize visualise create draw build please could would should
 together combined overall entire across throughout so far since until
 past previous current recent latest year's month's how's what's did
+given give gave granted grant offered offer provided provide applied apply
+sold bought buy buys spent spend recorded record achieved achieve reached
 """.split())
 
 
@@ -425,12 +431,73 @@ def _percent_aliases(plan):
     return dict(plan, metrics=metrics, order_by=order_by, filters=filters)
 
 
+# Fact columns the planner sometimes names as if they were measures
+# (APP1-025: "SalesTargetSAR", rejected, the repair turn did not recover).
+COLUMN_MEASURES = {
+    "SalesTargetSAR": "Sales Target", "NetSalesSAR": "Net Sales",
+    "GrossSalesSAR": "Gross Sales", "GrossProfitSAR": "Gross Profit",
+    "DiscountSAR": "Total Discounts", "CostSAR": "Cost",
+    "TotalQuantity": "Units Sold",
+}
+_COLUMN_MEASURE = re.compile(
+    r'("name"\s*:\s*")(' + "|".join(COLUMN_MEASURES) + r')(")')
+
+
+def fix_column_measures(raw):
+    """The planner's raw JSON with column names used as measure names
+    replaced by the measure (only ``"name"`` keys: in a plan they name
+    measures). Returns ``(raw, replaced names)``."""
+
+    found = []
+
+    def swap(match):
+        found.append(match.group(2))
+        return match.group(1) + COLUMN_MEASURES[match.group(2)] + match.group(3)
+
+    return _COLUMN_MEASURE.sub(swap, str(raw or "")), found
+
+
+# A grouping finer than a year, and the words that ask for it.
+_SUB_YEAR = {"YearMonth", "MonthName", "MonthNumber", "Date", "Quarter",
+             "WeekNumber", "DayName"}
+_ASKS_FOR_TIME = re.compile(
+    r"\b(?:months?|monthly|quarters?|quarterly|q[1-4]|weeks?|weekly|weekdays?|"
+    r"weekends?|days?|daily|dates?|trends?|over time|periods?|seasons?|seasonal|"
+    r"seasonality|when|timeline|january|february|march|april|may|june|july|"
+    r"august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|"
+    r"sep|sept|oct|nov|dec)\b", re.I)
+
+
+def _drop_unasked_time_groups(plan, question):
+    """"Units sold by category in 2025" was planned by category AND month
+    (APP1-008, 48 rows instead of 4). A month, quarter, week, day or date
+    grouping is dropped when the question has no word asking for one."""
+
+    if not question or _ASKS_FOR_TIME.search(question):
+        return plan, None
+    groups = plan.get("group_by") or []
+    dropped = [g for g in groups if g.get("table") == "DimDate"
+               and g.get("column") in _SUB_YEAR]
+    if not dropped:
+        return plan, None
+    refs = {f"DimDate[{g['column']}]" for g in dropped}
+    return (dict(plan, group_by=[g for g in groups if g not in dropped],
+                 order_by=[o for o in plan.get("order_by") or []
+                           if o.get("field") not in refs]),
+            "no breakdown by " + " or ".join(sorted({_column_words(g["column"])
+                                                     for g in dropped}))
+            + " (not asked)")
+
+
 def normalize_plan(plan, question=None):
     """Fix plan shapes that cannot answer what was asked. Returns
     ``(plan, notes)``; the plan is re-validated by the caller."""
 
     notes = []
     plan = _percent_aliases(plan)
+    plan, unasked = _drop_unasked_time_groups(plan, question)
+    if unasked:
+        notes.append(unasked)
     plan, recounted = _count_orders(plan)
     if recounted:
         notes.append("orders are counted as distinct order IDs (also in "
@@ -461,9 +528,19 @@ def merge_repeated_filters(plan):
         return plan, None
 
     plan = dict(plan)
-    plan["filters"] = [item for item in filters if not (
+    kept = [item for item in filters if not (
         item.get("type") == "column" and item.get("operator") == "eq"
         and (item["table"], item["column"]) in repeated)]
+    # Only the values being compared (APP1-014 showed every year): one
+    # internal "in" filter per column (see validate_query_plan(allow_in)).
+    for table, column in sorted(repeated):
+        values = []
+        for item in by_column[(table, column)]:
+            if item["value"] not in values:
+                values.append(item["value"])
+        kept.append({"type": "column", "table": table, "column": column,
+                     "operator": "in", "value": values})
+    plan["filters"] = kept
     group_by = list(plan.get("group_by") or [])
     for table, column in sorted(repeated):
         if {"table": table, "column": column} not in group_by:
