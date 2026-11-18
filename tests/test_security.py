@@ -239,6 +239,23 @@ def test_sign_in_screen_blocks_until_the_right_password(make_app):
     assert TEST_PASSWORD not in json.dumps(audit.entries())
 
 
+def _ribbon(app):
+    return " ".join(h.proto.body for h in app.get("html")
+                    if '<div class="ip-brand">' in h.proto.body)
+
+
+def test_ribbon_shows_the_signed_in_user(make_app):
+    app = make_app(user=None)
+    app.run()
+    assert "ip-user" not in _ribbon(app)             # sign-in screen: nobody yet
+    app = make_app("ana", ana=user_record(display_name="Ana <b>", permissions=["power_bi"]))
+    app.run()
+    assert not app.exception
+    ribbon = _ribbon(app)
+    assert ribbon.count("ip-user\"") == 1
+    assert "Ana &lt;b&gt;" in ribbon and "· ana" in ribbon   # escaped, with the username
+
+
 def test_admin_page_follows_the_permission(make_app):
     analyst = user_record(permissions=["power_bi"], all_folders=False)
     app = make_app("ana", ana=analyst)

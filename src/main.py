@@ -1,4 +1,5 @@
 import base64
+import html
 import os
 import uuid
 from pathlib import Path
@@ -127,6 +128,13 @@ html, body, .stApp, .stMarkdown, button, input, textarea {
     border: 1px solid rgba(255, 255, 255, .16);
     color: rgba(255, 255, 255, .92);
 }
+.ip-pill.ip-user {
+    background: rgba(94, 234, 212, .16);
+    border-color: rgba(94, 234, 212, .45);
+    color: #fff; font-weight: 600;
+}
+.ip-pill.ip-user svg { color: #5EEAD4; flex: none; }
+.ip-user-id { font-weight: 400; color: rgba(255, 255, 255, .72); }
 .ip-dot { width: 8px; height: 8px; border-radius: 50%; background: #98A2B3; }
 .ip-dot.ok { background: #34D399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .22); }
 .ip-dot.bad { background: #F97066; box-shadow: 0 0 0 3px rgba(249, 112, 102, .22); }
@@ -451,8 +459,22 @@ if st.session_state.view == "documents":
     tagline = ("Ask your PDF documents in plain language. Answers come only from "
                "the documents, with file and page.")
 
-st.html(
-    f"""
+def brand_bar(user=None):
+    """The blue ribbon; with ``user``, a box with the signed-in user."""
+
+    user_pill = ""
+    if user:
+        name = html.escape(user["display_name"] or user["username"])
+        login = html.escape(user["username"])
+        user_pill = (
+            f'<span class="ip-pill ip-user" title="Signed in as {login}">'
+            '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">'
+            '<path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 '
+            '2.2c-4.2 0-8 2.1-8 5v1.3c0 .8.6 1.5 1.5 1.5h13c.8 0 1.5-.7 1.5-1.5v-1.3c0'
+            '-2.9-3.8-5-8-5Z"/></svg>'
+            f'{name}' + (f' <span class="ip-user-id">· {login}</span>'
+                         if name != login else "") + '</span>')
+    return f"""
 <div class="ip-brand">
   <div class="ip-brand-left">
     <div class="ip-logo">{LOGO_SMALL}</div>
@@ -461,10 +483,15 @@ st.html(
       <div class="ip-tag">{tagline}</div>
     </div>
   </div>
-  <div class="ip-pills">{pills}</div>
+  <div class="ip-pills">{pills}{user_pill}</div>
 </div>
 """
-)
+
+
+# Drawn before the sign-in check so the sign-in screen has the ribbon too;
+# filled in again with the user's name once someone is signed in.
+brand_slot = st.empty()
+brand_slot.html(brand_bar())
 
 
 # =====================================================
@@ -474,6 +501,7 @@ st.html(
 # Draws the first-admin, sign-in or new-password screen and stops the run
 # until someone is signed in.
 CURRENT_USER = auth.require()
+brand_slot.html(brand_bar(CURRENT_USER))
 
 
 def allowed(permission):
