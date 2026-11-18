@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[2]
 LOG = ROOT / "logs" / "security.jsonl"
 EVENTS = ("setup", "signed_in", "resumed", "sign_in_failed", "locked", "signed_out",
           "session_expired", "user_created", "user_updated", "user_deleted",
-          "password_changed", "password_reset", "folders_changed", "denied")
+          "password_changed", "password_reset", "folders_changed", "denied",
+          "backup_downloaded")
 _LOCK = threading.Lock()
 
 

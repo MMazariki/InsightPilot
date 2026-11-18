@@ -403,7 +403,7 @@ def test_access_page_creates_a_user_and_assigns_a_folder(make_app):
     app.button(key="open_access").click().run()
     assert not app.exception and app.session_state.view == "access"
     assert [t.label for t in app.tabs] == ["Users", "Document folders",
-                                          "Sign-in policy", "Security log"]
+                                          "Sign-in policy", "Security log", "Backup"]
     app.text_input(key="acc_new_username").set_value("Sara")
     app.text_input(key="acc_new_display").set_value("Sara Ali")
     app.multiselect(key="acc_new_folders").set_value(["101"])
@@ -462,6 +462,27 @@ def test_admin_deletes_a_user_but_not_themselves(make_app):
     # Your own account: the delete and password buttons are not offered.
     app.selectbox(key="acc_edit_user").set_value("tester").run()
     assert app.button(key="acc_edit_tester_reset").disabled
+
+
+def test_backup_zip_holds_config_and_logs(tmp_path):
+    import io
+    import zipfile
+
+    from src import access_page
+
+    (tmp_path / "config").mkdir()
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "config" / "users.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "config" / "settings.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "logs" / "actions.jsonl").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "logs" / "actions-2026-10.jsonl").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "logs" / "app.err.log").write_text("x", encoding="utf-8")
+    name, data, names = access_page.backup_zip(tmp_path, dt.datetime(2026, 11, 19, 9, 5))
+    assert name == "insightpilot-backup-20261119-0905.zip"
+    inside = zipfile.ZipFile(io.BytesIO(data)).namelist()
+    assert sorted(names) == ["config/settings.json", "config/users.json",
+                             "logs/actions-2026-10.jsonl", "logs/actions.jsonl"]
+    assert "README.txt" in inside and "logs/app.err.log" not in inside
 
 
 def test_action_needs_the_actions_permission(make_app):

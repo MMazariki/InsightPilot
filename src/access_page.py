@@ -332,6 +332,60 @@ def _policy_tab(data, me):
                "Reloading the browser tab always asks to sign in again.")
 
 
+BACKUP_FILES = ["config/settings.json", "config/users.json", "config/alerts.json",
+                "config/secrets.bin"]
+
+
+def backup_zip(root=None, now=None):
+    """``(file name, zip bytes, names)`` of the settings, users, alerts,
+    encrypted keys and every log (``logs/*.jsonl``, monthly files too)."""
+
+    import datetime as dt
+    import io
+    import zipfile
+    from pathlib import Path
+
+    root = Path(root) if root else users.ROOT
+    now = now or dt.datetime.now()
+    files = [root / name for name in BACKUP_FILES] + sorted((root / "logs").glob("*.jsonl"))
+    buffer = io.BytesIO()
+    names = []
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            if path.is_file():
+                name = path.relative_to(root).as_posix()
+                archive.write(path, name)
+                names.append(name)
+        archive.writestr("README.txt", (
+            f"InsightPilot backup, {now:%Y-%m-%d %H:%M}.\n\n"
+            "Restore: stop InsightPilot, copy config\\ and logs\\ back into the "
+            "project folder, start it again.\n"
+            "config\\users.json holds password hashes: keep this file private.\n"
+            "config\\secrets.bin (API keys, email password) is encrypted for this "
+            "Windows account on this computer; elsewhere, enter the keys again.\n"))
+    return f"insightpilot-backup-{now:%Y%m%d-%H%M}.zip", buffer.getvalue(), names
+
+
+def _backup_tab(me):
+    st.write("Download the settings, users, alerts, encrypted keys and all logs as one "
+             "zip file, to keep somewhere safe. The documents (PDFs) and the search "
+             "index are not included: back up the `documents` folder separately.")
+    st.warning("The zip holds the users' password hashes: store it as privately as "
+               "the computer itself.", icon=":material/lock:")
+    if st.button("Prepare backup", key="acc_backup_make", icon=":material/inventory_2:"):
+        name, data, names = backup_zip()
+        st.session_state.acc_backup = (name, data, names)
+    prepared = st.session_state.get("acc_backup")
+    if prepared:
+        name, data, names = prepared
+        st.caption(f"{len(names)} files: " + ", ".join(names))
+        st.download_button(f"Download {name} ({len(data) / 1024:,.0f} KB)", data,
+                           file_name=name, mime="application/zip", key="acc_backup_get",
+                           icon=":material/download:", type="primary",
+                           on_click=lambda: audit.record("backup_downloaded", by=me,
+                                                         files=len(names)))
+
+
 def _log_tab():
     rows = list(reversed(audit.entries(limit=300)))
     if not rows:
@@ -367,7 +421,7 @@ def render(settings, me):
 
     data = users.load()
     folders = disk_folders(settings)
-    tabs = st.tabs(["Users", "Document folders", "Sign-in policy", "Security log"])
+    tabs = st.tabs(["Users", "Document folders", "Sign-in policy", "Security log", "Backup"])
     with tabs[0]:
         _users_tab(data, me, folders)
     with tabs[1]:
@@ -376,3 +430,5 @@ def render(settings, me):
         _policy_tab(data, me)
     with tabs[3]:
         _log_tab()
+    with tabs[4]:
+        _backup_tab(me)
