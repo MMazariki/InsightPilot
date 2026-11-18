@@ -101,6 +101,43 @@ def test_export_runs_only_after_approve_and_only_once(make_app, tmp_path):
     assert len(list((tmp_path / "exports").glob("*.csv"))) == 1
 
 
+def _quick(app):
+    return {b.key.rsplit("_", 1)[-1] if not b.key.endswith("_post") else "teams_post": b
+            for b in app.button if b.key and b.key.startswith("quick_")}
+
+
+def test_buttons_under_the_answer_open_the_same_card(make_app, tmp_path):
+    app = make_app()
+    app.run()
+    assert _quick(app) == {}                       # no answer yet, no buttons
+    _ask(app, "Net sales by region")
+    buttons = _quick(app)
+    assert set(buttons) == {"email", "export", "task", "teams_post"}
+    assert buttons["task"].label == "To Do task"
+
+    buttons["export"].click().run()
+    assert not app.exception
+    draft = _draft(app)
+    assert draft["kind"] == "export" and draft["format"] == "xlsx"
+    assert not (tmp_path / "exports").exists()      # nothing before Approve
+    app.button(key=f"act_{draft['id']}_approve").click().run()
+    assert len(list((tmp_path / "exports").glob("*.xlsx"))) == 1
+
+    # Email: no recipient until one is chosen on the card.
+    _quick(app)["email"].click().run()
+    email = next(d for d in app.session_state.action_drafts.values() if d["kind"] == "email")
+    assert email["recipients"] == []
+    assert app.button(key=f"act_{email['id']}_approve").disabled
+    app.multiselect(key=f"act_{email['id']}_recipients").set_value(["sara@company.com"]).run()
+    assert not app.button(key=f"act_{email['id']}_approve").disabled
+
+
+def test_buttons_follow_the_switches(make_app):
+    app = make_app(enabled=False)
+    _ask(app, "Net sales by region")
+    assert _quick(app) == {}
+
+
 def test_unknown_recipient_cannot_be_approved(make_app):
     app = make_app()
     _ask(app, "Net sales by region")

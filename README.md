@@ -203,6 +203,14 @@ After a data answer, ask in the chat:
 * or both at once: "Email net sales by region in 2025 to Layla" (answered
   first, then drafted)
 
+Or use the **buttons under the latest data answer**: **Email**, **Excel**,
+**Reminder** (**To Do task** when tasks go to To Do) and **Teams**. Only
+the kinds switched on in Admin → Actions are shown, and only to users with
+the Actions permission. A button opens the same draft card as a typed
+request. Email starts with no recipient (choose one on the card), Excel
+can be switched to CSV, and the reminder has no due date until you set
+one.
+
 The assistant drafts the action on a card: recipients, subject, your note,
 the attachment, the task list, with a preview of exactly what will be sent.
 Fields can be edited. **Nothing happens until you click Approve**, and each

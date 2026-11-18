@@ -407,3 +407,4 @@ def test_action_needs_the_actions_permission(make_app):
     assert not app.exception
     assert app.session_state.action_drafts == {}
     assert "not allowed to run actions" in app.session_state.messages[-1]["content"]
+    assert not [b for b in app.button if b.key and b.key.startswith("quick_")]

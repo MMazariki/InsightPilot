@@ -378,6 +378,8 @@ def answer_question(question):
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": answer,
+                # A data answer: the action buttons go under the latest one.
+                "actionable": st.session_state.action_context is not None,
                 "suggestions": list(getattr(
                     st.session_state.agent, "suggestions", []) or []),
             })
@@ -763,6 +765,10 @@ with chat_column, st.container(border=True, key="chat_card"):
                     )
 
         last_index = len(st.session_state.messages) - 1
+        # The action buttons sit under the latest data answer only: that is
+        # the answer an action works on.
+        latest_answer = max((i for i, m in enumerate(st.session_state.messages)
+                             if m.get("actionable")), default=None)
         for index, message in enumerate(st.session_state.messages):
 
             if message["role"] == "user":
@@ -776,6 +782,9 @@ with chat_column, st.container(border=True, key="chat_card"):
                     # nothing can be approved without it.
                     if draft and allowed("actions"):
                         action_card.render(draft, SETTINGS, ACTION_SELF)
+                    if index == latest_answer and allowed("actions"):
+                        action_card.quick_buttons(SETTINGS, ACTION_SELF,
+                                                  f"quick_{index}")
                     # Suggested rephrasings of a declined question, as
                     # buttons on the latest answer only.
                     if index == last_index and message.get("suggestions"):

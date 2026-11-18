@@ -87,6 +87,53 @@ def start(parsed, prompt, settings, self_address):
             "action_id": draft["id"]}
 
 
+# ------------------------------------------------------- quick buttons
+
+def quick_kinds(settings):
+    """The action buttons offered under an answer: ``[(kind, label, icon)]``,
+    only for the kinds switched on in Admin → Actions."""
+
+    actions = settings["actions"]
+    if not actions["enabled"]:
+        return []
+    task_label = "Reminder" if actions["task_via"] == "ics" else "To Do task"
+    offered = [("email", "Email", ":material/mail:"),
+               ("export", "Excel", ":material/table_view:"),
+               ("task", task_label, ":material/event:"),
+               ("teams_post", "Teams", ":material/forum:")]
+    return [o for o in offered if actions["kinds"].get(o[0])]
+
+
+def button_request(kind):
+    """The same draft request a typed message would give, for a button:
+    no recipients (chosen on the card), Excel, no due date."""
+
+    return {"kind": kind, "question": None, "recipients": [], "note": "",
+            "format": "xlsx", "per_row": False, "row_filter": None,
+            "task_text": "", "due": None}
+
+
+def _click_quick(kind, label, settings, self_address):
+    st.session_state.messages.append(start(
+        button_request(kind), f"[{label} button]", settings, self_address))
+
+
+def quick_buttons(settings, self_address, key):
+    """A row of buttons (Email, Excel, Reminder, ...) under the latest data
+    answer. Each one opens the same approval card as typing the request."""
+
+    kinds = quick_kinds(settings)
+    if not kinds or st.session_state.action_context is None:
+        return
+    columns = st.columns(len(kinds) + 1)
+    for column, (kind, label, icon) in zip(columns, kinds):
+        column.button(label, key=f"{key}_{kind}", icon=icon,
+                      help=f"{service.KIND_LABELS[kind]}: opens a draft to check; "
+                           "nothing happens before you approve it.",
+                      on_click=_click_quick, args=(kind, label, settings, self_address),
+                      use_container_width=True)
+
+
 # ------------------------------------------------------------- the card
 
 def _k(draft, name):
