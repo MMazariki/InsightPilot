@@ -158,12 +158,40 @@ def _users_tab(data, me, folders):
                 folders="all" if all_folders else picked):
             st.rerun()
 
-    one, two, three = st.columns(3)
+    one, generate, two, three = st.columns(4)
     with one:
-        if st.button("Reset password", key=f"{prefix}_reset", icon=":material/lock_reset:",
+        with st.popover("Change password", icon=":material/password:",
+                        use_container_width=True, disabled=selected == me,
+                        help="Type a new password for this user. Change your own "
+                             "in the account menu (it asks for the current one)."):
+            with st.form(f"{prefix}_setpw", border=False):
+                new = st.text_input(f"New password for {selected}", type="password",
+                                    key=f"{prefix}_setpw_new", autocomplete="new-password",
+                                    help=f"At least {data['policy']['min_password_length']} "
+                                         "characters, with letters and a digit or symbol.")
+                repeat = st.text_input("Repeat it", type="password",
+                                       key=f"{prefix}_setpw_repeat",
+                                       autocomplete="new-password")
+                must_change = st.checkbox("The user must choose a new one at the next "
+                                          "sign-in", value=True, key=f"{prefix}_setpw_must")
+                set_it = st.form_submit_button("Set password", type="primary",
+                                               icon=":material/key:")
+            if set_it:
+                if new != repeat:
+                    st.error("The two passwords differ.", icon=":material/error:")
+                elif _apply(lambda d: users.set_password(d, selected, new,
+                                                         must_change=must_change),
+                            f"Password of **{selected}** changed"
+                            + (" (to be changed at the next sign-in)." if must_change
+                               else "."),
+                            "password_reset", me, user=selected, typed=True,
+                            must_change=must_change):
+                    st.rerun()
+    with generate:
+        if st.button("Temporary password", key=f"{prefix}_reset", icon=":material/lock_reset:",
                      use_container_width=True, disabled=selected == me,
-                     help="Sets a temporary password; the user chooses a new one "
-                          "at the next sign-in. Change your own in the account menu."):
+                     help="The app makes a temporary password and shows it once; the "
+                          "user chooses a new one at the next sign-in."):
             password = _temporary_password()
             if _apply(lambda d: users.set_password(d, selected, password, must_change=True),
                       "", "password_reset", me, user=selected):
@@ -177,8 +205,9 @@ def _users_tab(data, me, folders):
                       "user_updated", me, user=selected, unlocked=True):
                 st.rerun()
     with three:
-        with st.popover("Delete", icon=":material/delete:", use_container_width=True,
-                        disabled=selected == me):
+        with st.popover("Delete user", icon=":material/person_remove:",
+                        use_container_width=True, disabled=selected == me,
+                        help="You cannot delete your own account."):
             st.write(f"Delete **{selected}**? They can no longer sign in. "
                      "Deactivating keeps the account and can be undone.")
             if st.button("Delete for good", key=f"{prefix}_delete", type="primary"):

@@ -338,6 +338,47 @@ def test_access_page_creates_a_user_and_assigns_a_folder(make_app):
     assert "user_created" in events
 
 
+def _open_user(app, name):
+    app.run()
+    app.button(key="open_access").click().run()
+    app.selectbox(key="acc_edit_user").set_value(name).run()
+    assert not app.exception
+    return f"acc_edit_{name}"
+
+
+def test_admin_changes_a_users_password(make_app):
+    app = make_app(sara=user_record(permissions=["documents"]))
+    prefix = _open_user(app, "sara")
+    app.text_input(key=f"{prefix}_setpw_new").set_value(GOOD)
+    app.text_input(key=f"{prefix}_setpw_repeat").set_value("Different-2026")
+    next(b for b in app.button if b.label == "Set password").click().run()
+    assert any("differ" in e.value for e in app.error)
+    assert users.verify_password(TEST_PASSWORD, users.load()["users"]["sara"]["password"])
+
+    app.text_input(key=f"{prefix}_setpw_repeat").set_value(GOOD)
+    app.checkbox(key=f"{prefix}_setpw_must").uncheck()
+    next(b for b in app.button if b.label == "Set password").click().run()
+    assert not app.exception
+    sara = users.load()["users"]["sara"]
+    assert users.verify_password(GOOD, sara["password"]) and not sara["must_change_password"]
+    assert any("Password of **sara** changed" in s.value for s in app.success)
+    entry = audit.entries()[-1]
+    assert entry["event"] == "password_reset" and entry["by"] == "tester"
+    assert GOOD not in json.dumps(audit.entries())
+
+
+def test_admin_deletes_a_user_but_not_themselves(make_app):
+    app = make_app(sara=user_record(permissions=["documents"]))
+    prefix = _open_user(app, "sara")
+    app.button(key=f"{prefix}_delete").click().run()
+    assert not app.exception
+    assert "sara" not in users.load()["users"]
+    assert any("deleted" in s.value for s in app.success)
+    # Your own account: the delete and password buttons are not offered.
+    app.selectbox(key="acc_edit_user").set_value("tester").run()
+    assert app.button(key="acc_edit_tester_reset").disabled
+
+
 def test_action_needs_the_actions_permission(make_app):
     from tests.test_action_flow import FakeAgent
 

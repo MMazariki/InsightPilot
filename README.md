@@ -28,8 +28,13 @@ Everyone signs in (`src/security/`).
 * **Users and folder access** (the people icon next to the gear, for users
   with that permission) has four tabs:
   * **Users:** add a user (a temporary password is shown once; they choose
-    their own at the first sign-in), and edit, deactivate, unlock, reset
-    the password or delete a user.
+    their own at the first sign-in), and edit, deactivate or unlock a user.
+    Under **Edit a user**:
+    * **Change password** types a new password for that user, with an
+      option to make them change it at the next sign-in.
+    * **Temporary password** has the app make one and show it once.
+    * **Delete user** removes the account; it asks you to confirm.
+    * You change your own password from the account menu instead.
   * **Document folders:** a grid of folders × users. Tick who may open each
     folder; you can also create a folder there.
   * **Sign-in policy** and the **Security log**.
