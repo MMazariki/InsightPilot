@@ -147,6 +147,29 @@ def test_email_chart_uses_the_type_shown_in_the_report(make_app):
     assert _draft(app)["context"]["visual_type"] == "pieChart"
 
 
+def test_email_chart_reads_the_visuals_own_points(make_app):
+    class FakePowerBI:
+        queries = []
+
+        def execute_dax(self, dax):
+            self.queries.append(dax)
+            return {"rows": [{"DimDate[Year]": y, "[v0]": float(y)} for y in (2025, 2026)]}
+
+    app = make_app()
+    _ask(app, "Net sales by year")
+    app.session_state.agent.powerbi = FakePowerBI()
+    app.session_state.action_context["visual_type"] = "lineChart"
+    app.session_state.visual_request = {
+        "visualType": "lineChart",
+        "fields": [{"role": "Category", "target": {"table": "DimDate", "column": "Year"}},
+                   {"role": "Y", "target": {"table": "FactSales", "measure": "Net Sales"}}]}
+    _quick(app)["email"].click().run()
+    assert not app.exception
+    points = _draft(app)["context"]["chart_data"]["points"]
+    assert [p["label"] for p in points] == ["2025", "2026"]
+    assert FakePowerBI.queries and FakePowerBI.queries[0].startswith("EVALUATE")
+
+
 def test_buttons_follow_the_switches(make_app):
     app = make_app(enabled=False)
     _ask(app, "Net sales by region")

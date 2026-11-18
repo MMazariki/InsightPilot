@@ -18,7 +18,7 @@ from pathlib import Path
 import streamlit as st
 
 from src import settings as app_settings
-from src.actions import address_book, chart, service
+from src.actions import address_book, chart, service, visual_data
 from src.actions import render as content
 from src.actions.validate import problems
 
@@ -93,9 +93,27 @@ def start(parsed, prompt, settings, self_address):
         visual = st.session_state.get("visual_request") or {}
         draft["context"]["visual_type"] = (visual.get("visualType")
                                            or draft["context"]["visual_type"])
+        if draft["kind"] == "email" and visual:
+            draft["context"]["chart_data"] = _visual_points(visual)
     st.session_state.action_drafts[draft["id"]] = draft
     return {"role": "assistant", "content": DRAFT_MESSAGE[draft["kind"]],
             "action_id": draft["id"]}
+
+
+def _visual_points(visual):
+    """The points the report visual plots, read with the chat's own
+    read-only Power BI connection (``src/actions/visual_data.py``). ``None``
+    when that fails: the email chart is then drawn from the answer table."""
+
+    agent = st.session_state.get("agent")
+    powerbi = getattr(agent, "powerbi", None)
+    if powerbi is None:
+        return None
+    try:
+        with st.spinner("Reading the chart's data from Power BI..."):
+            return visual_data.fetch(visual, powerbi.execute_dax)
+    except Exception:
+        return None
 
 
 # ------------------------------------------------------- quick buttons
@@ -246,7 +264,7 @@ def render(draft, settings, self_address):
             if context["rows"]:
                 st.checkbox(f"Attach the table as {draft['format'].upper()}",
                             value=draft.get("attach", False), key=_k(draft, "attach"))
-            if chart.series(context):
+            if chart.has_chart(context):
                 st.checkbox("Include a chart picture in the email",
                             value=draft.get("chart", True), key=_k(draft, "chart"))
         elif kind == "teams_post":

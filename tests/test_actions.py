@@ -410,6 +410,73 @@ def test_chart_follows_the_report_visual():
     assert chart.chart_png(two) is None
 
 
+GROWTH_VISUAL = {
+    "visualType": "lineChart",
+    "fields": [{"role": "Category", "target": {"table": "DimDate", "column": "Year"}},
+               {"role": "Series", "target": {"table": "DimStore", "column": "StoreName"}},
+               {"role": "Y", "target": {"table": "FactSales", "measure": "Net Sales"}}],
+    "filters": [{"kind": "advanced", "target": {"table": "DimDate", "column": "Year"},
+                 "operator": "GreaterThanOrEqual", "value": 2021},
+                {"kind": "advanced", "target": {"table": "DimDate", "column": "Year"},
+                 "operator": "LessThanOrEqual", "value": 2026}]}
+
+
+def test_visual_query_reads_what_the_report_plots():
+    from src.actions import visual_data
+
+    dax, plan = visual_data.build_query(GROWTH_VISUAL)
+    assert "'DimDate'[Year],\n    'DimStore'[StoreName]" in dax
+    assert "FILTER(ALL('DimDate'[Year]), 'DimDate'[Year] >= 2021)" in dax
+    assert '"v0", [Net Sales]' in dax and dax.startswith("EVALUATE")
+    rows = [{"DimDate[Year]": year, "DimStore[StoreName]": store, "[v0]": float(year - 2000)}
+            for year in (2026, 2021, 2023) for store in ("B", "A")]
+    found = visual_data.fetch(GROWTH_VISUAL, lambda q: {"rows": rows})
+    assert found["series"] == "Store Name" and found["category"] == "Year"
+    assert [p["label"] for p in found["points"]][::2] == ["2021", "2023", "2026"]
+    # Tables and cards have no picture.
+    assert visual_data.build_query({"visualType": "tableEx", "fields": []}) is None
+
+
+def test_visual_query_applies_top_n_and_measure_filters():
+    from src.actions import visual_data
+
+    request = {"visualType": "clusteredBarChart",
+               "fields": [{"role": "Category", "target": {"table": "DimStore", "column": "StoreName"}},
+                          {"role": "Y", "target": {"table": "FactSales", "measure": "Net Sales"}}],
+               "filters": [{"kind": "basic", "target": {"table": "DimDate", "column": "Year"},
+                            "operator": "In", "values": [2026]},
+                           {"kind": "topN", "target": {"table": "DimStore", "column": "StoreName"},
+                            "operator": "Top", "itemCount": 2,
+                            "orderBy": {"table": "FactSales", "measure": "Net Sales"}}]}
+    dax, _ = visual_data.build_query(request)
+    assert "'DimDate'[Year] IN {2026}" in dax
+    rows = [{"DimStore[StoreName]": n, "[v0]": v} for n, v in [("a", 5.0), ("b", 9.0), ("c", 7.0)]]
+    found = visual_data.fetch(request, lambda q: {"rows": rows})
+    assert sorted(p["label"] for p in found["points"]) == ["b", "c"]
+    months = {"visualType": "lineChart",
+              "fields": [{"role": "Category", "target": {"table": "DimDate", "column": "MonthName"}},
+                         {"role": "Y", "target": {"table": "FactSales", "measure": "Net Sales"}}]}
+    rows = [{"DimDate[MonthName]": m, "[v0]": 1.0} for m in ("March", "January", "February")]
+    found = visual_data.fetch(months, lambda q: {"rows": rows})
+    assert [p["label"] for p in found["points"]] == ["January", "February", "March"]
+    assert visual_data.category_text("YearMonth", "2026-03-01T00:00:00") == "Mar 2026"
+
+
+def test_chart_from_the_visual_points():
+    from src.actions import chart, visual_data
+
+    rows = [{"DimDate[Year]": y, "DimStore[StoreName]": s, "[v0]": float(y - 2000 + i)}
+            for y in range(2021, 2027) for i, s in enumerate(("Riyadh Mall 1", "Abha Mall 2"))]
+    context = {"question": "Which store grew the most?", "columns": ["DimStore[StoreName]"],
+               "rows": [], "visual_type": "lineChart",
+               "chart_data": visual_data.fetch(GROWTH_VISUAL, lambda q: {"rows": rows})}
+    assert chart.kind(context) == "line"
+    assert chart.chart_png(context).startswith(b"\x89PNG")
+    assert chart.alt_text(context) == "Line chart: Net Sales by Year and Store Name"
+    assert chart.short(412345.5) == "412.35K" and chart.short(0.881, True) == "88.1%"
+    assert chart.short(1_250_000) == "1.25M" and chart.short(98.0) == "98"
+
+
 def test_smtp_email_shows_the_chart_in_the_body(tmp_path):
     _Smtp.sent = []
     settings = _smtp_settings()

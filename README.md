@@ -206,14 +206,22 @@ After a data answer, ask in the chat:
 * or both at once: "Email net sales by region in 2025 to Layla" (answered
   first, then drafted)
 
-**Emails show a chart picture** above the table when the answer has
-labels and numbers (2 to 25 rows), drawn on this computer (Pillow). It
-follows the chart in the report for that answer: the same type (column,
-bar, line, pie or donut, including a type chosen in the chart type
-selector), sorted the same way, in Power BI's default colours. Answers the
-report shows as a table, a card or with a legend get no picture. It is shown in the email body, not as a separate
-file, and can be switched off on the card ("Include a chart picture"). The
-card's preview shows it.
+**Emails show the report's chart** above the table. When the email is
+drafted, the app reads the points the report visual plots from Power BI
+(one read-only query with the visual's own fields and filters,
+`src/actions/visual_data.py`) and draws the same chart on this computer
+(Pillow):
+* the same type: column, bar, line, column-and-line, pie or donut,
+  including a type chosen in the chart type selector;
+* the same categories, legend (for example one line per store), filters
+  and top N;
+* Power BI's default colours and sort order, with values shortened
+  (412.3K).
+
+If Power BI cannot be reached, the chart is drawn from the answer table.
+Answers shown as a table or a card get no picture. You can switch it off
+on the card ("Include a chart picture"), and the card's preview shows it.
+Alerts draw their chart from the matching rows only.
 
 Or use the **buttons under the latest data answer**: **Email**, **Excel**,
 **Reminder** (**To Do task** when tasks go to To Do) and **Teams**. Only
