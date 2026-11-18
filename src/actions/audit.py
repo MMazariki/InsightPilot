@@ -11,6 +11,8 @@ import json
 import threading
 from pathlib import Path
 
+from src import logfiles
+
 ROOT = Path(__file__).resolve().parents[2]
 LOG = ROOT / "logs" / "actions.jsonl"
 EVENTS = ("drafted", "approved", "sent", "failed", "refused", "cancelled",
@@ -36,6 +38,7 @@ def record(event, draft, log=None, **detail):
     path = Path(log) if log else LOG
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
+        logfiles.rotate(path)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, default=str) + "\n")
     return entry

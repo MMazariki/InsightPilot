@@ -193,8 +193,11 @@ def record(alert, status, detail="", rows=0, by="", log=None):
     entry = {"time": dt.datetime.now().isoformat(timespec="seconds"),
              "alert": alert.get("id"), "name": alert.get("name"), "status": status,
              "rows": rows, "detail": str(detail)[:400], "by": by}
+    from src import logfiles
+
     path = Path(log) if log else LOG
     path.parent.mkdir(parents=True, exist_ok=True)
+    logfiles.rotate(path)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
