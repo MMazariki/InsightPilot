@@ -396,3 +396,17 @@ environment variables for Power BI sign-in.
 ```
 
 Evaluation method and measured results: [`docs/EVALUATION.md`](docs/EVALUATION.md).
+
+**Report panel component** (`powerbi_embed_component/`). The app runs an
+installed copy, and its built JavaScript is not in git. After changing
+`frontend/src/index.ts`:
+
+```powershell
+cd powerbi_embed_component\powerbi_embed_component\frontend; npm run build; cd ..\..\..
+Remove-Item -Recurse -Force powerbi_embed_component\build -ErrorAction SilentlyContinue
+.venv\Scripts\python.exe -m pip install --no-deps --force-reinstall .\powerbi_embed_component
+```
+
+Then check that `.venv\Lib\site-packages\powerbi_embed_component\frontend\build`
+holds exactly one `index-*.js`, restart the app and reload the browser with
+Ctrl+F5.
