@@ -54,8 +54,11 @@ Everyone signs in (`src/security/`).
 * **Passwords** are stored as salted scrypt hashes in `config\users.json`
   (not committed); never in clear and never in a log.
 * **Lockout:** after 5 failed sign-ins the account is locked for 15 minutes.
-* **Idle sign-out** after 8 hours. Reloading the browser tab asks to sign
-  in again.
+* **Idle sign-out** after 8 hours.
+* **Reloading the tab keeps you signed in.** The browser keeps a random
+  token in a cookie for this site; only its hash is stored. It ends after
+  8 hours unused, at sign-out, and when the password changes or the account
+  is deactivated or deleted. A password change ends it in every browser.
 * All of these limits can be changed under Sign-in policy.
 * The app always keeps at least one active account that can manage users;
   you cannot delete, deactivate or demote yourself.

@@ -118,7 +118,7 @@ def password_problem(password, username="", policy=None):
 # ----------------------------------------------------------------- store
 
 def empty():
-    return {"version": 1, "policy": dict(POLICY_DEFAULTS), "users": {}}
+    return {"version": 1, "policy": dict(POLICY_DEFAULTS), "users": {}, "sessions": {}}
 
 
 def load(path=None):
@@ -136,6 +136,10 @@ def load(path=None):
     out["policy"] = clean_policy(data.get("policy") or {})
     for name, user in (data.get("users") or {}).items():
         out["users"][name] = _normal_user(user)
+    for digest, session in (data.get("sessions") or {}).items():
+        if isinstance(session, dict) and session.get("user") in out["users"]:
+            out["sessions"][digest] = {k: session.get(k) for k in
+                                       ("user", "expires", "created", "seen")}
     return out
 
 
@@ -275,6 +279,8 @@ def update_user(data, username, acting, display_name=None, permissions=None,
     if folders is not None:
         user["folders"] = _clean_folders(folders)
     _require_manager_left(data, before)
+    if not user["active"]:
+        end_user_sessions(data, username)
     return user
 
 
@@ -286,6 +292,7 @@ def delete_user(data, username, acting):
     before = copy.deepcopy(data["users"])
     del data["users"][username]
     _require_manager_left(data, before)
+    end_user_sessions(data, username)
 
 
 def set_password(data, username, password, must_change=False):
@@ -300,6 +307,8 @@ def set_password(data, username, password, must_change=False):
     user["password"] = hash_password(password)
     user["must_change_password"] = bool(must_change)
     user["failed_attempts"], user["locked_until"] = 0, None
+    # Remembered sign-ins made with the old password end.
+    end_user_sessions(data, username)
 
 
 def unlock(data, username):
@@ -354,6 +363,73 @@ def authenticate(data, username, password, now=None):
     user["failed_attempts"], user["locked_until"] = 0, None
     user["last_sign_in"] = now.isoformat(timespec="seconds")
     return name, "signed_in", ""
+
+
+# -------------------------------------------- remembered sign-ins
+
+# A browser that reloads the tab presents its session token (a cookie) and
+# is signed in again without the password. Only a SHA-256 hash of the token
+# is stored, so the users file cannot be used to sign in. A token ends when
+# it has not been used for the idle time in the policy, at sign-out, and
+# when the user's password changes or the account is deactivated or deleted.
+
+def _token_hash(token):
+    return hashlib.sha256(str(token).encode("utf-8")).hexdigest()
+
+
+def _purge_sessions(data, now):
+    for digest, session in list(data["sessions"].items()):
+        try:
+            if dt.datetime.fromisoformat(session["expires"]) <= now:
+                del data["sessions"][digest]
+        except (TypeError, ValueError, KeyError):
+            del data["sessions"][digest]
+
+
+def create_session(data, username, now=None):
+    now = _now(now)
+    _purge_sessions(data, now)
+    token = secrets.token_urlsafe(32)
+    minutes = data["policy"]["session_idle_minutes"]
+    data["sessions"][_token_hash(token)] = {
+        "user": username, "created": now.isoformat(timespec="seconds"),
+        "seen": now.isoformat(timespec="seconds"),
+        "expires": (now + dt.timedelta(minutes=minutes)).isoformat(timespec="seconds")}
+    return token
+
+
+def resume_session(data, token, now=None):
+    """The username for a remembered sign-in, or ``None``. Extends the
+    token's life when used (returns ``(username, changed)``)."""
+
+    now = _now(now)
+    if not token:
+        return None, False
+    session = data["sessions"].get(_token_hash(token))
+    if not session:
+        return None, False
+    user = data["users"].get(session.get("user"))
+    try:
+        expired = dt.datetime.fromisoformat(session["expires"]) <= now
+    except (TypeError, ValueError, KeyError):
+        expired = True
+    if expired or user is None or not user["active"] or locked(user, now):
+        data["sessions"].pop(_token_hash(token), None)
+        return None, True
+    session["seen"] = now.isoformat(timespec="seconds")
+    session["expires"] = (now + dt.timedelta(
+        minutes=data["policy"]["session_idle_minutes"])).isoformat(timespec="seconds")
+    return session["user"], True
+
+
+def end_session(data, token):
+    return data["sessions"].pop(_token_hash(token), None) is not None if token else False
+
+
+def end_user_sessions(data, username):
+    for digest, session in list(data["sessions"].items()):
+        if session.get("user") == username:
+            del data["sessions"][digest]
 
 
 # ------------------------------------------------------- permissions

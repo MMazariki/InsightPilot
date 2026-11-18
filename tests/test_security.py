@@ -127,6 +127,33 @@ def test_damaged_users_file_refuses_to_run(tmp_path):
     assert users.load(tmp_path / "missing.json")["users"] == {}
 
 
+# ------------------------------------------------- remembered sign-ins
+
+def test_remembered_sign_in_lifecycle():
+    now = dt.datetime(2026, 11, 19, 9, 0)
+    data = _data()
+    token = users.create_session(data, "tester", now)
+    assert token not in json.dumps(data)                     # only the hash is kept
+    assert users.resume_session(data, token, now + dt.timedelta(hours=7))[0] == "tester"
+    # Used at 16:00, so it lives until 00:00 (8 hours idle), not 17:00.
+    assert users.resume_session(data, token, now + dt.timedelta(hours=14))[0] == "tester"
+    assert users.resume_session(data, token, now + dt.timedelta(hours=23))[0] is None
+    assert users.resume_session(data, "made-up", now)[0] is None
+
+
+def test_remembered_sign_in_ends_on_password_deactivation_and_sign_out():
+    data = _data(sara=user_record(permissions=["power_bi"]))
+    one, two = users.create_session(data, "sara"), users.create_session(data, "sara")
+    mine = users.create_session(data, "tester")
+    users.set_password(data, "sara", GOOD)
+    assert users.resume_session(data, one)[0] is None and users.resume_session(data, two)[0] is None
+    assert users.resume_session(data, mine)[0] == "tester"
+    three = users.create_session(data, "sara")
+    users.update_user(data, "sara", "tester", active=False)
+    assert users.resume_session(data, three)[0] is None
+    assert users.end_session(data, mine) and users.resume_session(data, mine)[0] is None
+
+
 # ------------------------------------------------------- folder access
 
 def test_folder_access_needs_the_permission_and_the_assignment():
@@ -242,6 +269,37 @@ def test_sign_in_screen_blocks_until_the_right_password(make_app):
 def _ribbon(app):
     return " ".join(h.proto.body for h in app.get("html")
                     if '<div class="ip-brand">' in h.proto.body)
+
+
+def test_reloaded_tab_is_signed_in_from_its_cookie(make_app, monkeypatch):
+    from src.security import login
+
+    app = make_app(user=None)
+    app.run()
+    app.text_input(key="auth_username").set_value("tester")
+    app.text_input(key="auth_password").set_value(TEST_PASSWORD)
+    app.button[0].click().run()
+    assert not app.exception
+    token = app.session_state.auth_token
+    # The cookie is written by a script element in the next completed run.
+    scripts = [h.proto.body for h in app.get("html") if "document.cookie" in h.proto.body]
+    assert scripts and token in scripts[0] and "SameSite=Strict" in scripts[0]
+
+    # A reload: a new session that only has the cookie.
+    monkeypatch.setattr(login, "_cookie_token", lambda: token)
+    again = make_app(user=None)
+    again.run()
+    assert not again.exception
+    assert again.session_state.auth_user == "tester"
+    assert "resumed" in [e["event"] for e in audit.entries()]
+
+    # After signing out, the same cookie no longer signs in.
+    again.session_state.auth_seen = 0                  # idle: signs out
+    again.run()
+    third = make_app(user=None)
+    third.run()
+    assert "auth_user" not in third.session_state
+    assert third.text_input(key="auth_username")
 
 
 def test_ribbon_shows_the_signed_in_user(make_app):
