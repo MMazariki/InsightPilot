@@ -27,6 +27,10 @@ def user_record(**changes):
 @pytest.fixture(autouse=True)
 def isolated_alerts(tmp_path, monkeypatch):
     from src import alerts
+    from src.actions import audit as action_audit
+
+    # The action log too: drafts made by any test never reach logs\actions.jsonl.
+    monkeypatch.setattr(action_audit, "LOG", tmp_path / "actions_default.jsonl")
 
     monkeypatch.setattr(alerts, "ALERTS_FILE", tmp_path / "alerts.json")
     monkeypatch.setattr(alerts, "LOG", tmp_path / "alerts.jsonl")

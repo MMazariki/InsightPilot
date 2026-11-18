@@ -96,13 +96,36 @@ def parse_condition(text):
     return found
 
 
+def split_condition(question, condition):
+    """A condition written into the question ("Target achievement % by store
+    below 80%") is moved to the condition when that is empty: the question
+    is asked without it and the rows are filtered with it. Returns
+    ``(question, condition)``."""
+
+    from src.actions.detect import _FILTER
+
+    question = re.sub(r"\s+", " ", str(question or "")).strip()
+    condition = str(condition or "").strip()
+    if condition:
+        return question, condition
+    match = _FILTER.search(question)
+    if not match:
+        return question, ""
+    rest = (question[:match.start()] + " " + question[match.end():])
+    rest = re.sub(r"\b(?:is|are|was|were|that|which|where|when|with)\s*$", "",
+                  rest.strip(" ,.?"), flags=re.I)
+    rest = re.sub(r"\s+", " ", rest).strip(" ,.?")
+    return (rest or question), match.group(0).strip()
+
+
 def clean(alert, book=(), domains=(), self_address=""):
     """A checked copy of ``alert`` from the page, or AlertError."""
 
     from src.actions import address_book
 
     name = str(alert.get("name") or "").strip()
-    question = re.sub(r"\s+", " ", str(alert.get("question") or "")).strip()
+    question, condition = split_condition(alert.get("question"), alert.get("condition"))
+    alert = {**alert, "condition": condition}
     if not name or len(name) > 80:
         raise AlertError("Give the alert a name (80 characters at most).")
     if not question or len(question) > 300:
@@ -207,6 +230,8 @@ def evaluate(alert, settings, agent_factory=None, now=None):
     from src.actions import render, service
 
     now = now or dt.datetime.now()
+    question, condition = split_condition(alert["question"], alert.get("condition"))
+    alert = {**alert, "question": question, "condition": condition}
     agent = (agent_factory or _default_agent)(settings)
     try:
         answer = agent.ask(alert["question"])
@@ -256,6 +281,9 @@ def run(alert, settings, secrets_=None, self_address="", by="schedule",
     from src.actions.validate import problems
 
     now = now or dt.datetime.now()
+    # Alerts saved before conditions were split out of the question.
+    question, condition = split_condition(alert["question"], alert.get("condition"))
+    alert = {**alert, "question": question, "condition": condition}
     with _LOCK:
         try:
             result = evaluate(alert, settings, agent_factory, now)
@@ -265,6 +293,9 @@ def run(alert, settings, secrets_=None, self_address="", by="schedule",
             return record(alert, "error", result["problem"], by=by, log=log)
         if alert["condition"] and not result["rows"]:
             return record(alert, "no_match", f"No row where {result['described']}.",
+                          by=by, log=log)
+        if not result["rows"]:
+            return record(alert, "no_match", "The answer has no rows: nothing to send.",
                           by=by, log=log)
 
         draft = _email_draft(alert, result, settings, self_address)

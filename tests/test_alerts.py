@@ -75,6 +75,26 @@ def test_clean_checks_every_field():
         alerts.clean(_alert(recipients=["me"]), BOOK, [], "")
 
 
+@pytest.mark.parametrize("question,condition,expected", [
+    ("Target Achievement below 80%", "", ("Target Achievement", "below 80%")),
+    ("Target achievement % by store below 85%", "",
+     ("Target achievement % by store", "below 85%")),
+    ("Stores with net sales above 100000 this month", "",
+     ("Stores with net sales this month", "above 100000")),
+    ("Net sales by region", "", ("Net sales by region", "")),
+    ("Target Achievement below 80%", "at most 50%", ("Target Achievement below 80%",
+                                                      "at most 50%")),
+])
+def test_condition_written_in_the_question_is_moved(question, condition, expected):
+    assert alerts.split_condition(question, condition) == expected
+
+
+def test_saved_alert_gets_the_condition_from_the_question():
+    ok = alerts.clean(_alert(question="Target achievement % by store below 80%",
+                             condition=""), BOOK, ["company.com"], "me@company.com")
+    assert (ok["question"], ok["condition"]) == ("Target achievement % by store", "below 80%")
+
+
 def test_schedule():
     alert = _alert()
     assert alerts.due(alert, WED_9)
@@ -128,6 +148,23 @@ def test_no_condition_is_a_report(tmp_path):
     entry, sent = _run(tmp_path, _alert(condition=""))
     assert entry["status"] == "sent" and len(sent[0]["context"]["rows"]) == 3
     assert sent[0]["subject"].startswith("InsightPilot report:")
+
+
+def test_old_alert_with_condition_in_question_and_empty_answers(tmp_path):
+    asked = []
+
+    class Recording(FakeAgent):
+        def ask(self, question):
+            asked.append(question)
+            return super().ask(question)
+
+    entry, sent = _run(tmp_path, _alert(question="Target achievement % by store below 80%",
+                                        condition=""), agent=Recording())
+    assert asked == ["Target achievement % by store"]
+    assert entry["status"] == "sent" and entry["rows"] == 2
+    # A report whose answer has no rows sends nothing.
+    entry, sent = _run(tmp_path, _alert(condition=""), agent=FakeAgent(rows=[]))
+    assert entry["status"] == "no_match" and sent == []
 
 
 def test_failures_are_logged_not_sent(tmp_path):
