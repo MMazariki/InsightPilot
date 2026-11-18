@@ -102,6 +102,19 @@ SYNONYMS = [
     (r"(?:the )?(?:average basket size|basket size|units per order|"
      r"items per order|average units per order)",
      "units sold divided by orders", '"basket size" as units sold / orders'),
+    # prices: the model's "Unit Price" measure adds prices up (kept out of
+    # the app). Gross sales / units sold equals the quantity-weighted list
+    # price (checked on the live data, 2026-11-19); net sales / units sold is
+    # the price after discounts.
+    (r"(?:the )?(?:average selling prices?|avg selling prices?|asp|net prices? per unit|"
+     r"net unit prices?|selling prices? per unit)",
+     "net sales divided by units sold",
+     '"average selling price" as net sales / units sold (after discounts)'),
+    (r"(?:the )?(?:average unit prices?|avg unit prices?|unit prices?|"
+     r"average prices?(?: per (?:unit|item|piece))?|prices? per (?:unit|item|piece)|"
+     r"average item prices?|item prices?)",
+     "gross sales divided by units sold",
+     '"unit price" as gross sales / units sold (list price, before discounts)'),
     # counting orders: the planner otherwise counts units
     (r"(?:how many|number of|count of|total number of|total|the)\s+orders"
      r"|^orders(?= by| per| in| for)",

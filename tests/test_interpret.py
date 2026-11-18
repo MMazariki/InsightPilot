@@ -31,6 +31,10 @@ TODAY = dt.date(2026, 11, 17)
     ("Revenue this quarter by region", "Net sales Q4 2026 by region"),
     ("Units sold yesterday", "Units sold 2026-11-16"),
     ("Sales by sales channel", "Net sales by sales channel"),
+    ("Average unit price by category", "Gross sales divided by units sold by category"),
+    ("What is the price per unit by brand?",
+     "What is gross sales divided by units sold by brand?"),
+    ("Average selling price by region", "Net sales divided by units sold by region"),
 ])
 def test_interpret_rewrites(question, expected):
     text, notes = interpret(question, TODAY)
