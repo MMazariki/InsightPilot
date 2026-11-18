@@ -246,6 +246,19 @@ def _csv_cell(value):
     return text
 
 
+_PERCENT_TEXT = re.compile(r"^\s*([-+]?\d[\d,]*(?:\.\d+)?)\s*%\s*$")
+
+
+def _xlsx_number(value):
+    """A percentage the answer already formatted ("272.1%") becomes 2.721,
+    so Excel can sort and sum it; the column's 0.0% format shows it again."""
+    if isinstance(value, str):
+        match = _PERCENT_TEXT.match(value)
+        if match:
+            return float(match.group(1).replace(",", "")) / 100
+    return value
+
+
 def xlsx_bytes(context, sheet="Answer"):
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -259,7 +272,7 @@ def xlsx_bytes(context, sheet="Answer"):
     for row in context["rows"]:
         values = []
         for c in context["columns"]:
-            value = _raw(row.get(c))
+            value = _xlsx_number(_raw(row.get(c)))
             if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
                 value = "'" + value
             values.append(value)

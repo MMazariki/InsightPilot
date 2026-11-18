@@ -173,6 +173,21 @@ def test_files_neutralise_formulas():
     assert book["Answer"]["C2"].number_format == "0.0%"
 
 
+def test_xlsx_turns_formatted_percentages_into_numbers():
+    from openpyxl import load_workbook
+    import io
+    context = {"question": "Growth", "columns": ["[Store]", "[Change %]"],
+               "rows": [{"[Store]": "A", "[Change %]": "272.1%"},
+                        {"[Store]": "B", "[Change %]": "-1,050.5%"},
+                        {"[Store]": "C", "[Change %]": "n/a"}],
+               "notes": []}
+    page = load_workbook(io.BytesIO(render.xlsx_bytes(context)))["Answer"]
+    assert abs(page["B2"].value - 2.721) < 1e-9
+    assert abs(page["B3"].value + 10.505) < 1e-9
+    assert page["B4"].value == "n/a"
+    assert page["B2"].number_format == "0.0%"
+
+
 def test_card_is_plain_data():
     card = render.adaptive_card(CONTEXT, "Title", "note")
     assert card["type"] == "AdaptiveCard"
