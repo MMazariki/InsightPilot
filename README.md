@@ -48,7 +48,7 @@ Everyone signs in (`src/security/`).
   | Documents | the Documents page, only the folders assigned to the user |
   | Actions | email, reminders and exports from the chat |
   | Evaluation | the evaluation dashboard |
-  | Admin page | Admin settings (models, checks, Power BI, actions) |
+  | Admin page | Admin settings (models, checks, Power BI, actions), Alerts, and the Documents index buttons |
   | Users & folders | the Users and folder access page |
 
 * **Passwords** are stored as salted scrypt hashes in `config\users.json`
@@ -250,6 +250,34 @@ Tasks are either **calendar reminders** (an `.ics` file saved with the
 exports; open it to add the reminders to Outlook, Google or Apple Calendar)
 or **Microsoft To Do** (`Tasks.ReadWrite` and an Exchange mailbox). Design
 and rules: `docs/AGENT_ACTIONS_PLAN.md`.
+
+## Alerts
+
+The bell next to the gear (Admin page permission) opens **Alerts**: a data
+question checked every day at a set time, with an email when the answer
+meets a condition.
+
+* **An alert** has:
+  * a name;
+  * a question ("Target achievement % by store this month");
+  * a condition ("below 80%", "above 100000", "at least 95%"; empty means
+    send the answer every time, as a scheduled report);
+  * a time and days (Sunday to Thursday by default);
+  * recipients from the address book, or "me".
+* **When it runs**, the question is answered like a chat question, read-only.
+  If rows meet the condition, one email goes out with only those rows, the
+  chart and (optionally) the rows as Excel. If nothing matches, nothing is
+  sent.
+* **Test (no email)** shows what would be sent. **Run now** checks and
+  sends at once. Every check is listed under **History**
+  (`logs\alerts.jsonl`); alerts are stored in `config\alerts.json`.
+* **Creating the alert is the approval;** later emails go without a card.
+  Each email is still checked like a chat action: address book or allowed
+  domains, the sending account, and the daily email limit, which it shares
+  with chat emails.
+* **The app checks every minute while it is running.** If the computer is
+  off at an alert's time, the alert runs when the app is next running that
+  day.
 
 ## Evaluation dashboard
 

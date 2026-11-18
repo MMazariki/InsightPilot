@@ -282,7 +282,19 @@ action_card.init_state()
 if "view" not in st.session_state:
     requested_view = st.query_params.get("view")
     st.session_state.view = (requested_view if requested_view in
-                             ("admin", "documents", "evaluation", "access") else "chat")
+                             ("admin", "documents", "evaluation", "access", "alerts")
+                             else "chat")
+
+
+@st.cache_resource(show_spinner=False)
+def alert_scheduler():
+    """The alerts checker: one background thread per server process."""
+    from src import alerts
+
+    return alerts.start_scheduler()
+
+
+ALERTS = alert_scheduler()
 
 # Rebuild the agent when the saved settings or API keys change.
 SETTINGS_STAMP = app_settings.stamp()
@@ -332,6 +344,10 @@ def open_evaluation():
 
 def open_access():
     st.session_state.view = "access"
+
+
+def open_alerts():
+    st.session_state.view = "alerts"
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -513,9 +529,9 @@ def allowed(permission):
 # Each page needs one of the permissions an administrator assigns.
 VIEW_PERMISSION = {"chat": "power_bi", "documents": "documents",
                    "evaluation": "evaluation", "admin": "admin_settings",
-                   "access": "manage_users"}
+                   "access": "manage_users", "alerts": "admin_settings"}
 if not allowed(VIEW_PERMISSION[st.session_state.view]):
-    usable = [v for v in ("chat", "documents", "access", "admin", "evaluation")
+    usable = [v for v in ("chat", "documents", "access", "admin", "evaluation", "alerts")
               if allowed(VIEW_PERMISSION[v])]
     if not usable:
         left, middle, right = st.columns([1, 1.25, 1])
@@ -561,6 +577,18 @@ if st.session_state.view == "access":
 
 
 # =====================================================
+# ALERTS
+# =====================================================
+
+if st.session_state.view == "alerts":
+    from src import alerts_page
+
+    with st.container(border=True, key="alerts_card"):
+        alerts_page.render(CURRENT_USER["username"], ALERTS)
+    st.stop()
+
+
+# =====================================================
 # DOCUMENTS PAGE (answers from PDFs)
 # =====================================================
 
@@ -599,9 +627,9 @@ chat_column, report_column = st.columns(
 
 with chat_column, st.container(border=True, key="chat_card"):
 
-    (title_column, docs_column, action_column, eval_column, admin_column,
+    (title_column, docs_column, action_column, eval_column, alerts_column, admin_column,
      users_column, account_column) = st.columns(
-        [2.3, 1.1, 1, 0.34, 0.34, 0.34, 0.9], vertical_alignment="center")
+        [2.3, 1.1, 1, 0.34, 0.34, 0.34, 0.34, 0.9], vertical_alignment="center")
     with title_column:
         st.html(
             '<div class="ip-card-title">Ask InsightPilot</div>'
@@ -635,6 +663,16 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/monitoring:",
                 help="Evaluation dashboard: measured accuracy, insights and reruns",
                 on_click=open_evaluation,
+                use_container_width=True,
+            )
+    with alerts_column:
+        if allowed("admin_settings"):
+            st.button(
+                "",
+                key="open_alerts",
+                icon=":material/notifications:",
+                help="Alerts: daily checks that email when a condition is met",
+                on_click=open_alerts,
                 use_container_width=True,
             )
     with admin_column:

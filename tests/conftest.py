@@ -24,6 +24,24 @@ def user_record(**changes):
     return user
 
 
+class _NoScheduler:
+    """Stands in for the alerts thread: tests never start the real one."""
+    last_tick = None
+    last_error = ""
+
+    def is_alive(self):
+        return False
+
+
+@pytest.fixture(autouse=True)
+def isolated_alerts(tmp_path, monkeypatch):
+    from src import alerts
+
+    monkeypatch.setattr(alerts, "ALERTS_FILE", tmp_path / "alerts.json")
+    monkeypatch.setattr(alerts, "LOG", tmp_path / "alerts.jsonl")
+    monkeypatch.setattr(alerts, "start_scheduler", lambda: _NoScheduler())
+
+
 @pytest.fixture(autouse=True)
 def isolated_users(tmp_path, monkeypatch):
     path = tmp_path / "users.json"
