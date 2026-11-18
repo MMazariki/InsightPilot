@@ -318,7 +318,7 @@ def _actions_tab(a, secrets):
              "aliases": ", ".join(e["aliases"])} for e in a["address_book"]]
     edited = st.data_editor(
         rows or [{"name": "", "email": "", "role": "", "aliases": ""}],
-        num_rows="dynamic", use_container_width=True, key=_key("act_book"),
+        num_rows="dynamic", width="stretch", key=_key("act_book"),
         column_config={
             "name": st.column_config.TextColumn("Name"),
             "email": st.column_config.TextColumn("Email"),
@@ -385,7 +385,7 @@ def _actions_tab(a, secrets):
               "Recipients": ", ".join(e.get("recipients", [])),
               "Subject": e.get("subject", ""), "Detail": e.get("detail", "")
               or "; ".join(e.get("problems", []))} for e in reversed(history)],
-            hide_index=True, use_container_width=True, height=260)
+            hide_index=True, width="stretch", height=260)
         st.caption(f"From `{audit.LOG}` (newest first).")
     else:
         st.caption("No actions yet.")
@@ -441,7 +441,7 @@ def render(agent_mode_in_use, voice_installed):
         )
     with top_right:
         if st.button("Back to InsightPilot", key=_key("back"),
-                     icon=":material/arrow_back:", use_container_width=True):
+                     icon=":material/arrow_back:", width="stretch"):
             st.session_state.view = "chat"
             st.rerun()
 
@@ -937,7 +937,7 @@ def render(agent_mode_in_use, voice_installed):
     with save_col:
         if st.button("Save settings", key=_key("save"), type="primary",
                      disabled=bool(errors) or not changed,
-                     icon=":material/save:", use_container_width=True):
+                     icon=":material/save:", width="stretch"):
             app_settings.save(clean)
             if planner_remove:
                 app_settings.save_secret("planner_api_key", "")
@@ -955,13 +955,13 @@ def render(agent_mode_in_use, voice_installed):
             did_save = True
     with discard_col:
         if st.button("Discard changes", key=_key("discard"), disabled=not changed,
-                     use_container_width=True):
+                     width="stretch"):
             _clear_widget_state()
             st.rerun()
     with reset_col:
         if st.button("Reset all to defaults", key=_key("reset"),
                      disabled=app_settings.is_default(saved),
-                     icon=":material/restart_alt:", use_container_width=True):
+                     icon=":material/restart_alt:", width="stretch"):
             app_settings.reset()
             _clear_widget_state()
             st.session_state.admin_notice = (

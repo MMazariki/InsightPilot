@@ -169,7 +169,7 @@ def _section(kind, job):
     with button:
         busy = job is not None
         if st.button("Rerun evaluation", key=f"rerun_{kind}", icon=":material/replay:",
-                     type="primary", disabled=busy, use_container_width=True,
+                     type="primary", disabled=busy, width="stretch",
                      help="Runs every question again with the current settings "
                           "(local models; takes several minutes). The result is "
                           "added as a new run."):
@@ -187,11 +187,11 @@ def _section(kind, job):
         if kind == "app":
             frame = pd.DataFrame(er.app_summary(data)["groups"])
             st.markdown("**Pass rate by question group**")
-            st.altair_chart(_bars(frame, "group", "Passed"), use_container_width=True)
+            st.altair_chart(_bars(frame, "group", "Passed"), width="stretch")
         else:
             frame = pd.DataFrame(er.doc_summary(data)["steps"])
             st.markdown("**From search to cited answer** (answerable questions)")
-            st.altair_chart(_bars(frame, "step", "Questions"), use_container_width=True)
+            st.altair_chart(_bars(frame, "step", "Questions"), width="stretch")
     with right:
         st.markdown("**Insights**")
         for note in er.insights(kind, runs):
@@ -201,7 +201,7 @@ def _section(kind, job):
     with left:
         st.markdown("**Pass rate per run**")
         if len(runs) > 1:
-            st.altair_chart(_trend(runs, kind), use_container_width=True)
+            st.altair_chart(_trend(runs, kind), width="stretch")
         else:
             st.caption("The trend appears after the next run.")
     with right:
@@ -210,17 +210,17 @@ def _section(kind, job):
         if types:
             st.dataframe(pd.DataFrame(types).rename(
                 columns={"type": "Failure", "count": "Cases"}),
-                hide_index=True, use_container_width=True)
+                hide_index=True, width="stretch")
         else:
             st.success("No failures in the latest run.", icon=":material/check_circle:")
 
     failures = _case_rows(kind, data, failed_only=True)
     if failures:
         st.markdown("**Failed questions**")
-        st.dataframe(pd.DataFrame(failures), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(failures), hide_index=True, width="stretch")
     with st.expander(f"All {len(data['results'])} questions in the latest run"):
         st.dataframe(pd.DataFrame(_case_rows(kind, data, failed_only=False)),
-                     hide_index=True, use_container_width=True, height=420)
+                     hide_index=True, width="stretch", height=420)
 
 
 @st.fragment(run_every=5)
@@ -256,7 +256,7 @@ def render():
                 'data. Methods and caveats: docs/EVALUATION.md.</div>')
     with back:
         if st.button("Back to Power BI", key="eval_back", icon=":material/arrow_back:",
-                     use_container_width=True):
+                     width="stretch"):
             st.session_state.view = "chat"
             st.query_params.clear()
             st.rerun()

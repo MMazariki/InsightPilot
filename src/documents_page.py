@@ -90,7 +90,7 @@ def _render_answer(message, folder, show_excerpts, index, read_aloud=True,
                     f"Open {Path(key).name}", data=path.read_bytes(),
                     file_name=Path(key).name, mime="application/pdf",
                     key=f"doc_dl_{index}_{number}", icon=":material/picture_as_pdf:",
-                    use_container_width=True)
+                    width="stretch")
 
 
 # ----------------------------------------------------------------- voice
@@ -247,13 +247,13 @@ def render(settings, user):
 
     with new_chat:
         if st.button("New chat", key="doc_new_chat", icon=":material/add_comment:",
-                     disabled=not messages, use_container_width=True):
+                     disabled=not messages, width="stretch"):
             histories[folder_id or ""] = []
             st.rerun()
     with back:
         if auth_users.can(user, "power_bi"):
             if st.button("Back to Power BI", key="doc_back", icon=":material/arrow_back:",
-                         use_container_width=True):
+                         width="stretch"):
                 st.session_state.view = "chat"
                 st.query_params.clear()
                 st.rerun()
@@ -305,7 +305,7 @@ def render(settings, user):
             index_now = st.button("Index now" if changes else "Index is up to date",
                                   key="doc_index", type="primary" if changes else "secondary",
                                   disabled=not (changes and can_index),
-                                  icon=":material/sync:", use_container_width=True)
+                                  icon=":material/sync:", width="stretch")
         # New or changed files are indexed automatically once per session
         # (an Admin setting), whoever opens the page.
         auto = (changes and can_index and config["auto_index"]
@@ -348,7 +348,7 @@ def render(settings, user):
                          "Pages": entry.get("pages", 0),
                          "Passages": entry.get("chunks", 0)}
                         for key, entry in sorted(library.items())]
-                st.dataframe(rows, hide_index=True, use_container_width=True,
+                st.dataframe(rows, hide_index=True, width="stretch",
                              height=min(38 + 35 * len(rows), 320))
                 if len(indexed) > 1:
                     st.multiselect("Search only in", indexed, key=f"doc_filter_{folder_id}",
@@ -374,7 +374,7 @@ def render(settings, user):
                                else '') + '</div>')
                     for number, example in enumerate(config["example_questions"]):
                         if st.button(example, key=f"doc_example_{number}",
-                                     use_container_width=True):
+                                     width="stretch"):
                             st.session_state.doc_queued = example
                             st.rerun()
                 else:

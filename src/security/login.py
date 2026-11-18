@@ -85,7 +85,7 @@ def _sign_in(data):
                                      autocomplete="current-password")
             submitted = st.form_submit_button("Sign in", type="primary",
                                               icon=":material/login:",
-                                              use_container_width=True)
+                                              width="stretch")
         if submitted:
             name, event, message = users.authenticate(data, username, password)
             users.save(data)
@@ -115,7 +115,7 @@ def _setup(data):
                                     key="auth_setup_pw2", autocomplete="new-password")
             submitted = st.form_submit_button("Create the account and sign in",
                                               type="primary", icon=":material/person_add:",
-                                              use_container_width=True)
+                                              width="stretch")
         if submitted:
             if password != confirm:
                 st.error("The two passwords differ.", icon=":material/error:")
@@ -148,7 +148,7 @@ def change_password_form(data, username, key, forced=False):
                                 key=f"{key}_confirm", autocomplete="new-password")
         submitted = st.form_submit_button("Change password", type="primary",
                                           icon=":material/key:",
-                                          use_container_width=forced)
+                                          width="stretch" if forced else "content")
     if not submitted:
         return False
     user = users.get(data, username)
@@ -275,7 +275,7 @@ def account_menu(user, key):
     """A popover with the user's name, password change and Sign out."""
 
     with st.popover(user["display_name"] or user["username"], icon=":material/person:",
-                    use_container_width=True):
+                    width="stretch"):
         st.caption(f"Signed in as **{user['username']}**")
         notice = st.session_state.pop("auth_notice", None)
         if notice:
@@ -285,5 +285,5 @@ def account_menu(user, key):
                 st.session_state.auth_notice = "Password changed."
                 st.rerun()
         if st.button("Sign out", key=f"{key}_out", icon=":material/logout:",
-                     use_container_width=True):
+                     width="stretch"):
             sign_out()

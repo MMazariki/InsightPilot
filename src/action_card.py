@@ -162,7 +162,7 @@ def quick_buttons(settings, self_address, key):
                       help=f"{service.KIND_LABELS[kind]}: opens a draft to check; "
                            "nothing happens before you approve it.",
                       on_click=_click_quick, args=(kind, label, settings, self_address),
-                      use_container_width=True)
+                      width="stretch")
 
 
 # ------------------------------------------------------------- the card
@@ -333,10 +333,10 @@ def render(draft, settings, self_address):
         approve_col.button(APPROVE_LABEL[kind], key=_k(draft, "approve"), type="primary",
                            icon=":material/check:", disabled=bool(found),
                            on_click=_click_approve, args=(draft["id"],),
-                           use_container_width=True)
+                           width="stretch")
         cancel_col.button("Cancel", key=_k(draft, "cancel"), icon=":material/close:",
                           on_click=_click_cancel, args=(draft["id"],),
-                          use_container_width=True)
+                          width="stretch")
     # The user has now seen this exact card; only now can it be approved.
     draft["shown"] = True
 
@@ -359,7 +359,7 @@ def _table(context, limit):
     st.dataframe(
         [{name: content.cell(context, row, column) for name, column in
           zip(content.labels(context), context["columns"])} for row in context["rows"][:limit]],
-        hide_index=True, use_container_width=True)
+        hide_index=True, width="stretch")
 
 
 def _outcome(draft):

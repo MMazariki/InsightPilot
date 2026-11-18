@@ -633,7 +633,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/description:",
                 help="Ask questions answered from your PDF documents",
                 on_click=open_documents,
-                use_container_width=True,
+                width="stretch",
             )
     with action_column:
         st.button(
@@ -642,7 +642,7 @@ with chat_column, st.container(border=True, key="chat_card"):
             icon=":material/add_comment:",
             on_click=reset_conversation,
             disabled=not st.session_state.messages,
-            use_container_width=True,
+            width="stretch",
         )
     with eval_column:
         if allowed("evaluation"):
@@ -652,7 +652,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/monitoring:",
                 help="Evaluation dashboard: measured accuracy, insights and reruns",
                 on_click=open_evaluation,
-                use_container_width=True,
+                width="stretch",
             )
     with alerts_column:
         if allowed("admin_settings"):
@@ -662,7 +662,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/notifications:",
                 help="Alerts: daily checks that email when a condition is met",
                 on_click=open_alerts,
-                use_container_width=True,
+                width="stretch",
             )
     with admin_column:
         if allowed("admin_settings"):
@@ -672,7 +672,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/settings:",
                 help="Admin settings: models, checks, Power BI, interface",
                 on_click=open_admin,
-                use_container_width=True,
+                width="stretch",
             )
     with users_column:
         if allowed("manage_users"):
@@ -682,7 +682,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                 icon=":material/manage_accounts:",
                 help="Users and folder access: accounts, permissions, document folders",
                 on_click=open_access,
-                use_container_width=True,
+                width="stretch",
             )
     with account_column:
         auth.account_menu(CURRENT_USER, "acct_chat")
@@ -788,7 +788,7 @@ with chat_column, st.container(border=True, key="chat_card"):
                         key=f"starter_{index}",
                         on_click=queue_prompt,
                         args=(question,),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         last_index = len(st.session_state.messages) - 1

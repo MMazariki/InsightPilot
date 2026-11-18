@@ -85,7 +85,7 @@ def _users_tab(data, me, folders):
             "Must change password": user["must_change_password"],
             "Last sign-in": (user["last_sign_in"] or "never").replace("T", " "),
         })
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.dataframe(rows, hide_index=True, width="stretch")
 
     folder_choices = sorted(set(folders) | {f for u in data["users"].values()
                                              for f in u["folders"]},
@@ -161,7 +161,7 @@ def _users_tab(data, me, folders):
     one, generate, two, three = st.columns(4)
     with one:
         with st.popover("Change password", icon=":material/password:",
-                        use_container_width=True, disabled=selected == me,
+                        width="stretch", disabled=selected == me,
                         help="Type a new password for this user. Change your own "
                              "in the account menu (it asks for the current one)."):
             with st.form(f"{prefix}_setpw", border=False):
@@ -189,7 +189,7 @@ def _users_tab(data, me, folders):
                     st.rerun()
     with generate:
         if st.button("Temporary password", key=f"{prefix}_reset", icon=":material/lock_reset:",
-                     use_container_width=True, disabled=selected == me,
+                     width="stretch", disabled=selected == me,
                      help="The app makes a temporary password and shows it once; the "
                           "user chooses a new one at the next sign-in."):
             password = _temporary_password()
@@ -200,13 +200,13 @@ def _users_tab(data, me, folders):
                 st.rerun()
     with two:
         if st.button("Unlock", key=f"{prefix}_unlock", icon=":material/lock_open:",
-                     use_container_width=True, disabled=not users.locked(user)):
+                     width="stretch", disabled=not users.locked(user)):
             if _apply(lambda d: users.unlock(d, selected), f"**{selected}** unlocked.",
                       "user_updated", me, user=selected, unlocked=True):
                 st.rerun()
     with three:
         with st.popover("Delete user", icon=":material/person_remove:",
-                        use_container_width=True, disabled=selected == me,
+                        width="stretch", disabled=selected == me,
                         help="You cannot delete your own account."):
             st.write(f"Delete **{selected}**? They can no longer sign in. "
                      "Deactivating keeps the account and can be undone.")
@@ -253,7 +253,7 @@ def _folders_tab(data, me, settings, folders):
                 + (" · has every folder anyway" if name in everything else "")
                 + (" · no Documents permission" if name in no_docs else ""))
         edited = st.data_editor(rows, column_config=columns, hide_index=True,
-                                use_container_width=True, key="acc_folder_grid",
+                                width="stretch", key="acc_folder_grid",
                                 num_rows="fixed")
         notes = []
         if everything:
@@ -289,7 +289,7 @@ def _folders_tab(data, me, settings, folders):
                           help="Letters, digits, '-' and '_'. Then copy the PDFs into it "
                                "and index them on the Documents page.")
     if b.button("Create folder", key="acc_create_folder", icon=":material/create_new_folder:",
-                use_container_width=True, disabled=not new_id.strip()):
+                width="stretch", disabled=not new_id.strip()):
         folder = new_id.strip()
         if not users.FOLDER_ID.fullmatch(folder):
             st.error("A folder number may contain only letters, digits, '-' and '_'.",
@@ -396,7 +396,7 @@ def _log_tab():
                    "User": r.get("user", ""), "By": r.get("by", ""),
                    "Detail": ", ".join(f"{k}: {v}" for k, v in r.items()
                                        if k not in ("time", "event", "user", "by"))}
-                  for r in rows], hide_index=True, use_container_width=True, height=420)
+                  for r in rows], hide_index=True, width="stretch", height=420)
     st.caption("Newest first, last 300 entries. Full log: `logs\\security.jsonl`.")
 
 
@@ -410,7 +410,7 @@ def render(settings, me):
                 'each person may open, and which document folders they see.</div>')
     with back:
         if st.button("Back", key="acc_back", icon=":material/arrow_back:",
-                     use_container_width=True):
+                     width="stretch"):
             st.session_state.view = "chat"
             st.query_params.clear()
             st.rerun()

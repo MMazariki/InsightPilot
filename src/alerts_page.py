@@ -112,7 +112,7 @@ def _show_result(result, alert):
     context = dict(result["context"], rows=rows)
     st.dataframe([{n: render.cell(context, r, c) for n, c in
                    zip(render.labels(context), context["columns"])} for r in rows[:50]],
-                 hide_index=True, use_container_width=True)
+                 hide_index=True, width="stretch")
 
 
 def _alert_card(alert, settings, secrets, self_address, me, now):
@@ -141,7 +141,7 @@ def _alert_card(alert, settings, secrets, self_address, me, now):
 
         test, send, edit, delete = st.columns(4)
         if test.button("Test (no email)", key=f"alert_test_{alert['id']}",
-                       icon=":material/science:", use_container_width=True):
+                       icon=":material/science:", width="stretch"):
             with st.spinner("Asking the question..."):
                 try:
                     result = alerts.evaluate(alert, settings)
@@ -150,19 +150,19 @@ def _alert_card(alert, settings, secrets, self_address, me, now):
                               "problem": f"The check failed: {exc}"}
             _show_result(result, alert)
         if send.button("Run now", key=f"alert_run_{alert['id']}", icon=":material/send:",
-                       use_container_width=True,
+                       width="stretch",
                        help="Checks now and emails if the condition is met."):
             with st.spinner("Checking and sending..."):
                 entry = alerts.run(alert, settings, secrets, self_address, by=me)
             label, entry_icon = STATUS.get(entry["status"], (entry["status"], None))
             (st.success if entry["status"] in ("sent", "no_match") else st.error)(
                 f"{label}. {entry['detail']}", icon=entry_icon)
-        with edit.popover("Edit", icon=":material/edit:", use_container_width=True):
+        with edit.popover("Edit", icon=":material/edit:", width="stretch"):
             values = _form(f"alert_edit_{alert['id']}", alert, settings, self_address)
             if values is not None and _save(values, settings, self_address, me,
                                             f"Alert **{alert['name']}** saved."):
                 st.rerun()
-        with delete.popover("Delete", icon=":material/delete:", use_container_width=True):
+        with delete.popover("Delete", icon=":material/delete:", width="stretch"):
             st.write(f"Delete the alert **{alert['name']}**?")
             if st.button("Delete for good", key=f"alert_delete_{alert['id']}", type="primary"):
                 alerts.save([a for a in alerts.load() if a["id"] != alert["id"]])
@@ -183,7 +183,7 @@ def render(me, now=None):
                 'time; an email goes out when the answer meets the condition.</div>')
     with back:
         if st.button("Back", key="alerts_back", icon=":material/arrow_back:",
-                     use_container_width=True):
+                     width="stretch"):
             st.session_state.view = "chat"
             st.query_params.clear()
             st.rerun()
@@ -228,4 +228,4 @@ def render(me, now=None):
                            "Result": STATUS.get(h["status"], (h["status"],))[0],
                            "Rows": h.get("rows", 0), "By": h.get("by", ""),
                            "Detail": h.get("detail", "")} for h in history],
-                         hide_index=True, use_container_width=True, height=320)
+                         hide_index=True, width="stretch", height=320)
