@@ -385,6 +385,31 @@ def test_chart_picture_is_drawn_only_when_it_helps():
     assert chart.chart_png(negative).startswith(b"\x89PNG")
 
 
+def test_chart_follows_the_report_visual():
+    from src.actions import chart
+
+    regions = {"question": "Net sales by region", "columns": ["DimStore[Region]", "[Net Sales]"],
+               "rows": [{"DimStore[Region]": r, "[Net Sales]": v}
+                        for r, v in [("Western", 5.0), ("Central", 9.0), ("Eastern", 2.0)]]}
+    for visual, shape in [("clusteredColumnChart", "column"), ("clusteredBarChart", "bar"),
+                          ("lineChart", "line"), ("pieChart", "pie"), ("donutChart", "donut"),
+                          (None, "column"), ("lineClusteredColumnComboChart", "column")]:
+        context = {**regions, "visual_type": visual}
+        assert chart.kind(context) == shape, visual
+        assert chart.chart_png(context).startswith(b"\x89PNG")
+    # Shown as a table or a card in the report: no picture.
+    assert chart.chart_png({**regions, "visual_type": "tableEx"}) is None
+    # A pie with too many slices or a negative value is drawn as bars.
+    many = {**regions, "visual_type": "pieChart", "rows": [
+        {"DimStore[Region]": f"R{i}", "[Net Sales]": float(i + 1)} for i in range(12)]}
+    assert chart.kind(many) == "bar"
+    # Two breakdowns (a legend in the report) cannot be one series.
+    two = {"question": "q", "columns": ["DimDate[Year]", "DimStore[Region]", "[Net Sales]"],
+           "rows": [{"DimDate[Year]": "2025", "DimStore[Region]": "W", "[Net Sales]": 1.0},
+                    {"DimDate[Year]": "2026", "DimStore[Region]": "W", "[Net Sales]": 2.0}]}
+    assert chart.chart_png(two) is None
+
+
 def test_smtp_email_shows_the_chart_in_the_body(tmp_path):
     _Smtp.sent = []
     settings = _smtp_settings()

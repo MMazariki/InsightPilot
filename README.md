@@ -207,8 +207,11 @@ After a data answer, ask in the chat:
   first, then drafted)
 
 **Emails show a chart picture** above the table when the answer has
-labels and numbers (2 to 25 rows): a bar chart drawn on this computer
-(Pillow), declines in red. It is shown in the email body, not as a separate
+labels and numbers (2 to 25 rows), drawn on this computer (Pillow). It
+follows the chart in the report for that answer: the same type (column,
+bar, line, pie or donut, including a type chosen in the chart type
+selector), sorted the same way, in Power BI's default colours. Answers the
+report shows as a table, a card or with a legend get no picture. It is shown in the email body, not as a separate
 file, and can be switched off on the card ("Include a chart picture"). The
 card's preview shows it.
 

@@ -115,10 +115,14 @@ def test_buttons_under_the_answer_open_the_same_card(make_app, tmp_path):
     assert set(buttons) == {"email", "export", "task", "teams_post"}
     assert buttons["task"].label == "To Do task"
 
+    # This answer drew no report visual: an older chart still in the report
+    # must not shape the email.
+    app.session_state.visual_request = {"visualType": "pieChart", "fields": []}
     buttons["export"].click().run()
     assert not app.exception
     draft = _draft(app)
     assert draft["kind"] == "export" and draft["format"] == "xlsx"
+    assert draft["context"]["visual_type"] is None
     assert not (tmp_path / "exports").exists()      # nothing before Approve
     app.button(key=f"act_{draft['id']}_approve").click().run()
     assert len(list((tmp_path / "exports").glob("*.xlsx"))) == 1
@@ -130,6 +134,17 @@ def test_buttons_under_the_answer_open_the_same_card(make_app, tmp_path):
     assert not app.button(key=f"act_{email['id']}_approve").disabled
     app.multiselect(key=f"act_{email['id']}_recipients").set_value([]).run()
     assert app.button(key=f"act_{email['id']}_approve").disabled
+
+
+def test_email_chart_uses_the_type_shown_in_the_report(make_app):
+    app = make_app()
+    _ask(app, "Net sales by region")
+    # The answer drew a column chart; the user switched the selector to pie.
+    app.session_state.action_context["visual_type"] = "clusteredColumnChart"
+    app.session_state.visual_request = {"visualType": "pieChart", "fields": []}
+    _quick(app)["email"].click().run()
+    assert not app.exception
+    assert _draft(app)["context"]["visual_type"] == "pieChart"
 
 
 def test_buttons_follow_the_switches(make_app):

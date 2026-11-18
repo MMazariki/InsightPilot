@@ -239,6 +239,10 @@ def evaluate(alert, settings, agent_factory=None, now=None):
         context = service.context_from(alert["question"], getattr(agent, "last_result", None),
                                        trace.get("interpreted", []),
                                        now.strftime("%Y-%m-%d %H:%M"))
+        if context is not None:
+            # The chart in the email: the visual the chat would draw.
+            visual = getattr(agent, "pending_visual_request", None) or {}
+            context["visual_type"] = visual.get("visualType")
     finally:
         try:
             agent.close()

@@ -48,6 +48,11 @@ def remember_answer(question, agent):
         dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
     # A declined or failed question leaves nothing to act on: "email this"
     # must never pick up an older answer.
+    if context is not None:
+        # The visual drawn in the report for this answer (None: the report
+        # still shows an older chart, which must not shape this email).
+        visual = getattr(agent, "pending_visual_request", None) or {}
+        context["visual_type"] = visual.get("visualType")
     st.session_state.action_context = context
     supersede()
 
@@ -82,6 +87,12 @@ def start(parsed, prompt, settings, self_address):
                 "example *Net sales by region in 2025*), then ask me to email, post, "
                 "export it or create tasks from it."}
     draft = service.create_draft(parsed, context, prompt, settings, self_address)
+    # The email's chart picture follows the visual shown in the report for
+    # this answer, with the type chosen in the chart type selector.
+    if draft["context"].get("visual_type"):
+        visual = st.session_state.get("visual_request") or {}
+        draft["context"]["visual_type"] = (visual.get("visualType")
+                                           or draft["context"]["visual_type"])
     st.session_state.action_drafts[draft["id"]] = draft
     return {"role": "assistant", "content": DRAFT_MESSAGE[draft["kind"]],
             "action_id": draft["id"]}
