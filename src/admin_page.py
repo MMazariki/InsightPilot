@@ -380,7 +380,8 @@ def _actions_tab(a, secrets):
     history = audit.entries(limit=200)
     if history:
         st.dataframe(
-            [{"Time": e["time"].replace("T", " "), "Event": e["event"], "Kind": e["kind"],
+            [{"Time": e["time"].replace("T", " "), "User": e.get("user", ""),
+              "Event": e["event"], "Kind": e["kind"],
               "Recipients": ", ".join(e.get("recipients", [])),
               "Subject": e.get("subject", ""), "Detail": e.get("detail", "")
               or "; ".join(e.get("problems", []))} for e in reversed(history)],

@@ -135,7 +135,8 @@ def test_matching_rows_are_emailed(tmp_path):
     assert draft["attach"]
     # Counted with the chat emails (shared daily limit).
     logged = audit.entries(tmp_path / "actions.jsonl")
-    assert [e["event"] for e in logged] == ["sent"] and logged[0]["kind"] == "email"
+    assert [e["event"] for e in logged] == ["drafted", "sent"]
+    assert logged[-1]["kind"] == "email" and logged[-1]["user"] == "alert by unknown"
     assert alerts.entries()[-1]["status"] == "sent"
 
 

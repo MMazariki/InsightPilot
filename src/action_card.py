@@ -86,7 +86,8 @@ def start(parsed, prompt, settings, self_address):
                 "There is no answer to act on yet. Ask a data question first (for "
                 "example *Net sales by region in 2025*), then ask me to email, post, "
                 "export it or create tasks from it."}
-    draft = service.create_draft(parsed, context, prompt, settings, self_address)
+    draft = service.create_draft(parsed, context, prompt, settings, self_address,
+                                 user=st.session_state.get("auth_user") or "")
     # The email's chart picture follows the visual shown in the report for
     # this answer, with the type chosen in the chart type selector.
     if draft["context"].get("visual_type"):

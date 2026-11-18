@@ -33,13 +33,18 @@ def context_from(question, last_result, notes=None, answered_at=""):
             "answered_at": answered_at}
 
 
-def create_draft(parsed, context, request, settings, self_address="", now=None, log=None):
+def create_draft(parsed, context, request, settings, self_address="", now=None, log=None,
+                 user=""):
+    """``user``: the signed-in user (or "alert by <user>"), written to the
+    action log with every event of this draft."""
+
     now = now or time.time()
     actions = settings["actions"]
     draft = {
         "id": uuid.uuid4().hex,
         "kind": parsed["kind"],
         "origin": ORIGIN,
+        "user": user,
         "request": request,
         "status": "pending",
         "shown": False,

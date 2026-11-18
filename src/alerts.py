@@ -256,7 +256,7 @@ def evaluate(alert, settings, agent_factory=None, now=None):
     return {"context": context, "rows": rows, "described": described, "problem": problem}
 
 
-def _email_draft(alert, result, settings, self_address):
+def _email_draft(alert, result, settings, self_address, log=None):
     from src.actions import service
 
     context = dict(result["context"], rows=result["rows"])
@@ -269,7 +269,8 @@ def _email_draft(alert, result, settings, self_address):
               "note": note, "format": "xlsx", "per_row": False, "row_filter": None,
               "task_text": "", "due": None}
     draft = service.create_draft(parsed, context, f"[Alert: {alert['name']}]", settings,
-                                 self_address)
+                                 self_address, log=log,
+                                 user=f"alert by {alert.get('created_by') or 'unknown'}")
     draft["subject"] = (f"InsightPilot alert: {alert['name']}" if alert["condition"]
                         else f"InsightPilot report: {alert['name']}")[:200]
     draft["attach"] = bool(alert.get("attach")) and bool(context["rows"])
@@ -302,7 +303,7 @@ def run(alert, settings, secrets_=None, self_address="", by="schedule",
             return record(alert, "no_match", "The answer has no rows: nothing to send.",
                           by=by, log=log)
 
-        draft = _email_draft(alert, result, settings, self_address)
+        draft = _email_draft(alert, result, settings, self_address, action_log)
         found = problems(draft, settings, secrets_, self_address, log=action_log)
         if found:
             audit.record("refused", draft, action_log, problems=found)

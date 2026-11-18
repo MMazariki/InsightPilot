@@ -95,6 +95,11 @@ def test_export_runs_only_after_approve_and_only_once(make_app, tmp_path):
     assert not app.exception
     files = list((tmp_path / "exports").glob("*.csv"))
     assert len(files) == 1 and _draft(app)["status"] == "done"
+    # Every event names the signed-in user.
+    from src.actions import audit
+    events = audit.entries(tmp_path / "actions.jsonl")
+    assert [e["event"] for e in events] == ["drafted", "approved", "sent"]
+    assert {e["user"] for e in events} == {"tester"}
     # The card is gone; the outcome is shown with a download button.
     assert not [b for b in app.button if b.key == f"act_{draft['id']}_approve"]
     app.run()

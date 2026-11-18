@@ -1,7 +1,8 @@
 """Append-only log of every action draft, approval, edit, cancel and result.
 
 One JSON object per line in ``logs/actions.jsonl`` (gitignored). Message
-bodies and table values are not logged: only who, what kind, the subject or
+bodies and table values are not logged: only who (the signed-in user who
+drafted and approved it, or the alert's creator), what kind, the subject or
 task titles, and the outcome.
 """
 
@@ -23,6 +24,7 @@ def record(event, draft, log=None, **detail):
     entry = {
         "time": dt.datetime.now().isoformat(timespec="seconds"),
         "event": event,
+        "user": draft.get("user", ""),
         "draft_id": draft.get("id"),
         "kind": draft.get("kind"),
         "request": draft.get("request", "")[:300],
