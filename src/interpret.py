@@ -62,7 +62,20 @@ def _relative_dates(today):
 # A replacement is only made when the wording is not already a model term.
 
 _NOT_AFTER_QUALIFIER = r"(?<!net )(?<!gross )(?<!sales )"
+_WEEK_PART = r"week[- ]?(?:ends?|days?)"
 SYNONYMS = [
+    # Weekends against weekdays is the IsWeekend flag, not the day names
+    # (APP2-015: "weekdays" was read as day name; 3 rows instead of 2).
+    # Before the "vs" and "day of week" rules.
+    (rf"(?:on |for |during )?{_WEEK_PART}\s+(?:vs\.?|versus|and|or|against|"
+     rf"compared (?:to|with))\s+(?:on |for )?{_WEEK_PART}",
+     "by IsWeekend", '"weekends vs weekdays" as the weekend flag (IsWeekend)'),
+    # Customers who bought are counted in the sales table (APP2-020).
+    (r"(?:how many|number of|count of|total number of)\s+(?:different |distinct |"
+     r"unique |individual )?customers?(?:\s+(?:bought|shopped|purchased|ordered|"
+     r"made a purchase|made purchases)(?:\s+(?:something|anything))?)?",
+     "number of distinct customers",
+     '"how many customers" as distinct customers with sales'),
     # performance words without a metric
     (r"how (?:did|do|does|are|is|were|was) (?:we|it|they|each \w+|every \w+|the \w+) (?:do|doing|perform|performing)",
      "what were net sales", '"how did … do" as net sales'),
@@ -157,6 +170,7 @@ together combined overall entire across throughout so far since until
 past previous current recent latest year's month's how's what's did
 given give gave granted grant offered offer provided provide applied apply
 sold bought buy buys spent spend recorded record achieved achieve reached
+something anything shopped purchased purchase purchases
 """.split())
 
 
@@ -188,10 +202,14 @@ _VOCABULARY = None
 def _vocabulary():
     global _VOCABULARY
     if _VOCABULARY is None:
-        _VOCABULARY = build_vocabulary() | NEUTRAL_WORDS | {
+        from evaluation.request_guard import WRITE_VERBS
+
+        # Write verbs are never "corrected": "Update ..." became "date ..."
+        # and slipped past the write-request guard (APP2-027).
+        _VOCABULARY = build_vocabulary() | NEUTRAL_WORDS | set(WRITE_VERBS) | {
             "revenue", "turnover", "income", "earnings", "branch", "shop",
             "outlet", "money", "pieces", "profitability", "period", "client",
-            "weekday", "performance"}
+            "weekday", "weekdays", "weekend", "weekends", "performance"}
     return _VOCABULARY
 
 

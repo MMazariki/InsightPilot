@@ -251,13 +251,23 @@ def check_semantic_rules(plan, catalog=None, model=None,
             for item in (plan.get("group_by", []) or [])
             if isinstance(item, dict)
         }
+        # Several different "eq" values on one column are a comparison
+        # ("compare 2021 and 2024"), which the app turns into a breakdown of
+        # just those values (src/interpret.py merge_repeated_filters); only
+        # a single value makes the grouping constant (APP2-002, 2026-11-19).
+        eq_values = {}
+        for condition in plan.get("filters", []) or []:
+            if (isinstance(condition, dict) and condition.get("type") == "column"
+                    and condition.get("operator") == "eq"):
+                field = f"{condition.get('table')}[{condition.get('column')}]"
+                eq_values.setdefault(field, set()).add(str(condition.get("value")))
         for condition in plan.get("filters", []) or []:
             if (not isinstance(condition, dict)
                     or condition.get("type") != "column"
                     or condition.get("operator") != "eq"):
                 continue
             field = f"{condition.get('table')}[{condition.get('column')}]"
-            if field in grouped:
+            if field in grouped and len(eq_values.get(field, ())) == 1:
                 raise ValueError(
                     f"The plan groups by {field} while filtering it to the "
                     f"single value {condition.get('value')!r}, which only adds "

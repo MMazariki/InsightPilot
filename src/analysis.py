@@ -369,9 +369,56 @@ def _percent(value):
     return "" if value is None else f"{value * 100:,.1f}%"
 
 
-def finish(result, plan, spec):
+def _share_column(groups, share):
+    """The column a share is taken across (the rest are the totals' keys)."""
+
+    if share.get("column"):
+        return f"{share['table']}[{share['column']}]"
+    # Share across the non-time grouping, within each time period.
+    non_time = [c for c in groups if c.split("[")[-1].rstrip("]") not in TIME_COLUMNS]
+    return non_time[-1] if non_time else (groups[-1] if groups else None)
+
+
+# Measures whose total is not the sum of its parts.
+NON_ADDITIVE = {"Orders", "Variance", "Sales Variance"}
+
+
+def needs_counted_totals(plan):
+    """True when a share's total must be counted, not added up: distinct
+    counts (an order with lines in two channels is one order, APP2-023),
+    ratios and percentages."""
+
+    expression = (plan.get("metrics") or [{}])[0].get("expression") or {}
+    if expression.get("kind") in ("distinct_count", "divide"):
+        return True
+    name = str(expression.get("name", ""))
+    return name.endswith("%") or name in NON_ADDITIVE
+
+
+def totals_plan(plan, spec):
+    """The plan without the column the share is taken across: one total per
+    outer group (for example per year), counted by Power BI."""
+
+    groups = [_ref(g) for g in plan.get("group_by") or []]
+    share_col = _share_column(groups, spec["share"])
+    return dict(plan, group_by=[g for g in plan["group_by"] if _ref(g) != share_col],
+                order_by=[], limit=None)
+
+
+def totals_from(result, plan):
+    """``{outer key: total}`` from the result of ``totals_plan``."""
+
+    columns = result.get("columns") or []
+    metric = _metric_column(columns, plan)
+    keys = [c for c in columns if c != metric and not c.startswith("[")]
+    return {tuple(r.get(c) for c in keys): r.get(metric) for r in result.get("rows") or []}
+
+
+def finish(result, plan, spec, totals=None):
     """Turn the query result into the answer's table. Returns
-    ``(result, notes)`` with ``columns`` and ``rows`` replaced."""
+    ``(result, notes)`` with ``columns`` and ``rows`` replaced. ``totals``:
+    counted totals per outer group for a share (``totals_plan``); without
+    them the parts are added up."""
 
     if not spec or not result.get("rows"):
         return result, []
@@ -440,22 +487,18 @@ def finish(result, plan, spec):
 
     share = spec.get("share")
     if share:
-        share_col = (f"{share['table']}[{share['column']}]"
-                     if share.get("column") else None)
         groups = [c for c in columns if c != metric and not c.startswith("[")]
-        if share_col is None:
-            # Share across the non-time grouping, within each time period.
-            non_time = [c for c in groups
-                        if c.split("[")[-1].rstrip("]") not in TIME_COLUMNS]
-            share_col = non_time[-1] if non_time else (groups[-1] if groups else None)
+        share_col = _share_column(groups, share)
         outer = [c for c in groups if c != share_col]
-        totals = {}
-        for r in rows:
-            key = tuple(r.get(c) for c in outer)
-            totals[key] = totals.get(key, 0) + (r.get(metric) or 0)
+        if totals is None:
+            # Additive measures: the total is the sum of the parts.
+            totals = {}
+            for r in rows:
+                key = tuple(r.get(c) for c in outer)
+                totals[key] = totals.get(key, 0) + (r.get(metric) or 0)
         out_rows = []
         for r in rows:
-            total = totals[tuple(r.get(c) for c in outer)]
+            total = totals.get(tuple(r.get(c) for c in outer))
             row = dict(r)
             row["Share %"] = (r.get(metric) or 0) / total if total else None
             out_rows.append(row)

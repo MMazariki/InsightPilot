@@ -18,6 +18,8 @@ WRITE_VERBS = (
     "delete", "remove", "drop", "truncate", "erase", "wipe", "purge",
     "update", "insert", "add", "create", "modify", "change", "edit",
     "overwrite", "rename", "set", "alter", "replace", "reset",
+    # added 2026-11-19 (APP2-027 asked to change a target value)
+    "increase", "decrease", "raise", "reduce", "boost", "adjust", "correct",
 )
 
 DATA_OBJECTS = (

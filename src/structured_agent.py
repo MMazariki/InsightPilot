@@ -211,12 +211,15 @@ class StructuredPlanningAgent:
     def _parse(self, raw: str) -> dict:
         return parse_planner_response(raw, semantic_checks=PIPELINE_VERSION)
 
-    def plan(self, question: str, trace: dict) -> dict:
+    def plan(self, question: str, trace: dict, original: str | None = None) -> dict:
         """Return a parsed response: plan or clarification. Raises
-        ``ValueError`` if no valid response is obtained after one repair."""
+        ``ValueError`` if no valid response is obtained after one repair.
+        ``original``: the user's own wording, screened too (the wording
+        fixes once turned "Update ..." into "date ...", APP2-027)."""
 
-        blocked = (screen_request(question)
-                   if self.options["request_guard"] else None)
+        blocked = None
+        if self.options["request_guard"]:
+            blocked = screen_request(original or question) or screen_request(question)
         if blocked is not None:
             trace["stages"].append("request_guard:blocked")
             detail = blocked["clarification"]
@@ -381,7 +384,7 @@ class StructuredPlanningAgent:
         read_note = ("_Read " + "; ".join(read_as) + "._\n\n") if read_as else ""
 
         try:
-            response = self.plan(planning_question, trace)
+            response = self.plan(planning_question, trace, original=question)
         except ValueError as exc:
             trace["stages"].append("failed_validation")
             trace["error"] = str(exc)
@@ -475,9 +478,17 @@ class StructuredPlanningAgent:
 
         table_result = _calendar_order(result, plan)
         if spec and result["row_count"] > 0:
-            from src.analysis import finish
+            from src import analysis
 
-            table_result, analysis_notes = finish(result, plan, spec)
+            totals = None
+            if spec.get("share") and analysis.needs_counted_totals(plan):
+                # Distinct counts and ratios: the total is its own read-only
+                # query, not the sum of the parts.
+                outer = analysis.totals_plan(plan, spec)
+                totals = analysis.totals_from(
+                    self.powerbi.execute_dax(compile_query_plan(outer)), outer)
+                trace["stages"].append("share_totals")
+            table_result, analysis_notes = analysis.finish(result, plan, spec, totals)
             plan_notes = plan_notes + analysis_notes
             trace["stages"].append("analysis")
             if spec.get("share") and not preferred_chart:
