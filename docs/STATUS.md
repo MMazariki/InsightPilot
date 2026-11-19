@@ -31,7 +31,12 @@ its settings moved to Admin).
 
 ## Open items
 
-0. **2026-11-19 (later): the five v2 failures were fixed** and a third new
+0. **2026-11-19 (latest): the two v3 failures were fixed** (weekend words
+   before the measure; outside data such as market share now declined) and
+   a fourth set, app_cases_v4, scored **9 / 11** (§3.9). Open: "net sales
+   on weekends" can get an unasked day breakdown; a plan grouping by a
+   year it also filters to one value is rejected without recovery.
+   **Earlier: the five v2 failures were fixed** and a third new
    set, app_cases_v3, scored **16 / 20 as run, 18 / 20 after correcting two
    wrong reference queries** (the app's share-of-orders answers were right;
    `docs/EVALUATION.md` §3.8). Open: "weekend versus weekday gross profit"

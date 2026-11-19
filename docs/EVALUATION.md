@@ -397,6 +397,34 @@ Caveats as in §3.7: written by the developer who also wrote the rules and
 the fixes (the write-request questions test verbs added in the same fix),
 20 questions, one run.
 
+### 3.9 Whole-app evaluation, 2026-11-19 (app_cases_v4)
+
+A fourth new set of 11 questions, committed (`e1a2727`) before the fixes
+for the two v3 failures (`d385471`) and before any run: new questions for
+those two failure types, plus questions that must keep working next to the
+fixes. The share references were checked before committing (store-type
+shares add up to 100%). Same method and model, one run; result file
+`evaluation/results/app_cases_v4_20261119-034641.json` (gitignored).
+
+| Group | Passed |
+|---|---:|
+| Weekend words before the measure | 2 / 2 |
+| Outside data declined (competitors, market size, industry average) | 3 / 3 |
+| Shares of the company's own totals (must keep working) | 2 / 2 |
+| Weekend and day of week (must keep working) | 1 / 2 |
+| Wording | 1 / 2 |
+| **All** | **9 / 11** |
+
+Failures (not fixed against this set):
+
+* APP4-008 "Net sales on weekends in 2026": the planner added a day-name
+  breakdown (3 rows instead of one total). The unasked-grouping fix keeps
+  day groupings when the question mentions weekends, because it cannot
+  tell "on weekends" (a filter) from "by weekend" (a breakdown).
+* APP4-010 "Gross sales by channel last month": the planner grouped by the
+  year it also filtered to one value; the check rejected it and the repair
+  turn did not recover.
+
 ## 4. Known limitations
 
 * **The dataset changed after these measurements.** Every result in this
