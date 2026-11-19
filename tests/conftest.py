@@ -52,3 +52,23 @@ def sign_in(app, username="tester"):
     app.session_state["auth_user"] = username
     app.session_state["auth_seen"] = time.time()
     return app
+
+
+@pytest.fixture(autouse=True)
+def old_reading_path(monkeypatch, request):
+    """Tests written for the rule-based reading path run with the AI
+    understanding step off (it is a switch in Admin); tests of the step
+    itself are marked ``understand``."""
+
+    if request.node.get_closest_marker("understand"):
+        return
+    from src import settings as app_settings
+    from src import structured_agent
+
+    monkeypatch.setitem(structured_agent.DEFAULT_OPTIONS, "understand", False)
+    monkeypatch.setitem(app_settings.DEFAULTS["pipeline"], "understand", False)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "understand: run with the AI understanding step on")

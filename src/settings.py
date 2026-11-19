@@ -88,6 +88,8 @@ DEFAULTS = {
         "verifier_fail_closed": False,
         "measure_name_check": True,
         "interpret_wording": True,
+        "understand": True,
+        "understand_model": "qwen2.5:7b-instruct",
         "max_table_rows": 50,
     },
     "powerbi": {
@@ -354,9 +356,11 @@ def validate(raw):
     for name in ("request_guard", "repair_turn", "answerability_check",
                  "no_metric_trigger", "strict_metric_words",
                  "verifier_fail_closed", "measure_name_check",
-                 "interpret_wording"):
+                 "interpret_wording", "understand"):
         clean["pipeline"][name] = bool(
             pipeline.get(name, DEFAULTS["pipeline"][name]))
+    clean["pipeline"]["understand_model"] = _text(pipeline.get(
+        "understand_model", DEFAULTS["pipeline"]["understand_model"]))
     rows = _number(pipeline.get("max_table_rows", 50), "max_table_rows", int,
                    False, errors, "Rows shown per answer")
     clean["pipeline"]["max_table_rows"] = 50 if rows is None else rows

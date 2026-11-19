@@ -31,7 +31,26 @@ its settings moved to Admin).
 
 ## Open items
 
-0. **2026-11-19 (latest): the two v3 failures were fixed** (weekend words
+00. **2026-11-19 (latest): AI understanding step (`src/understand.py`),
+   on by default.** The question is read as plain English by
+   `qwen2.5:7b-instruct` (today's date and the model's names, columns and
+   values in its prompt) into explicit fields: measures, breakdowns,
+   filters, years or dates, sort/top, growth/share/holiday, chart. The
+   app writes the planner's request from those fields, and the coder model
+   plans it under the strict schema. It declines only requests to change
+   data and messages unrelated to the data; a planner clarification is
+   retried as a plan. While on, the wording rules (`interpret()`,
+   `analysis.detect`, chart words), the measure-name check and the
+   answerability gate are skipped; they remain behind the Admin switch.
+   Live checks (stubbed Power BI): "Cost, gross profit by product and the
+   year for the last two years" -> Year 2025-2026 by product and year;
+   "past 6 months" -> date range; "which branch grew the most between 2023
+   and 2025" -> growth; "top 5 products this year". **Not measured on any
+   case set**: the accuracy figures below are for the rule-based reading.
+   About 35-55 s per question on this machine (two models, memory
+   pressure). "What % of revenue came from Riyadh stores" was read as each
+   Riyadh store's share, not Riyadh's share of the total.
+0. **2026-11-19: the two v3 failures were fixed** (weekend words
    before the measure; outside data such as market share now declined) and
    a fourth set, app_cases_v4, scored **9 / 11** (§3.9). Open: "net sales
    on weekends" can get an unasked day breakdown; a plan grouping by a

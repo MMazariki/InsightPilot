@@ -12,6 +12,7 @@ def files(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.mark.understand
 def test_defaults_are_valid_and_match_measured_configuration():
     clean, errors = app_settings.validate(app_settings.defaults())
     assert errors == []
@@ -26,6 +27,7 @@ def test_defaults_are_valid_and_match_measured_configuration():
         "answerability_check": True, "no_metric_trigger": True,
         "strict_metric_words": False, "verifier_fail_closed": False,
         "measure_name_check": True, "interpret_wording": True,
+        "understand": True, "understand_model": "qwen2.5:7b-instruct",
         "max_table_rows": 50,
     }
     assert app_settings.is_default(clean)

@@ -58,6 +58,27 @@ def _relative_dates(today):
     ]
 
 
+def planner_context(today=None):
+    """Today's date for the planner's system prompt, so the model itself
+    resolves any relative period ("the last two years", "past 6 months",
+    "since March") instead of a fixed list of phrases."""
+
+    today = today or dt.date.today()
+    return (
+        "\n\nTODAY:\n"
+        f"Today is {today.isoformat()} ({calendar.day_name[today.weekday()]}); "
+        f"the current year is {today.year} and the current month is "
+        f"{_month_name(today.year, today.month)}.\n"
+        "Resolve every relative period in the question (last, past, previous, "
+        "recent, since, so far, this, ...) against today and preserve it as "
+        "explicit DimDate filters: a span of whole years as DimDate[Year] "
+        "gte/lte numbers; a span of months, weeks or days as DimDate[Date] "
+        "gte/lte \"YYYY-MM-DD\". A span of the last N periods includes the "
+        "current one unless the user asks for complete or full periods. Never "
+        "drop a requested period."
+    )
+
+
 # ------------------------------------------------------------- synonyms
 # (pattern, replacement, note label). Applied in order, whole words only.
 # A replacement is only made when the wording is not already a model term.

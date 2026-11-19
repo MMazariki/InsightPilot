@@ -564,6 +564,23 @@ def render(agent_mode_in_use, voice_installed):
                  "question comes with a suggested rephrasing. Added after "
                  "the measured pipeline v11; not part of its accuracy "
                  "figures.")
+        understand_step = st.checkbox(
+            "Understand questions as plain English first (AI reading step)",
+            value=p["understand"], key=_key("understand"),
+            help="The AI reads the question freely (typos, synonyms, "
+                 "relative dates, vague wording), writes it as an explicit "
+                 "business request, then the planner builds the query under "
+                 "the model's rules. It declines only requests to change data "
+                 "and messages unrelated to the data, and says what it "
+                 "assumed. While on, it replaces the wording rules, the "
+                 "measure-name check and the answerability check. One extra "
+                 "model call per question. Not yet measured.")
+        understand_model = st.text_input(
+            "Model for the reading step", value=p["understand_model"],
+            key=_key("understand_model"), disabled=not understand_step,
+            help="A general language model reads plain English better than "
+                 "the coding model used for planning. Empty = the planner "
+                 "model. Runs on the same Ollama server as the planner.")
         max_rows = st.number_input(
             "Rows shown per answer", min_value=1, max_value=5000,
             value=int(p["max_table_rows"]), step=10, key=_key("max_table_rows"))
@@ -863,6 +880,8 @@ def render(agent_mode_in_use, voice_installed):
             "verifier_fail_closed": fail_closed,
             "measure_name_check": measure_names,
             "interpret_wording": interpret_wording,
+            "understand": understand_step,
+            "understand_model": understand_model,
             "max_table_rows": max_rows,
         },
         "powerbi": {

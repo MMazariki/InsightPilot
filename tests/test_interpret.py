@@ -368,3 +368,33 @@ def test_time_columns_sort_in_time_order_without_an_order():
     ranked = dict(plan, order_by=[{"field": "Net Sales", "direction": "desc"}])
     assert _calendar_order({"columns": ["DimDate[YearMonth]", "[Net Sales]"],
                             "rows": rows}, ranked)["rows"] == rows
+
+
+def test_planner_is_told_today_to_resolve_relative_periods():
+    import datetime as _dt
+    from src.interpret import planner_context
+
+    text = planner_context(_dt.date(2026, 11, 19))
+    assert "Today is 2026-11-19" in text
+    assert "current year is 2026" in text
+    assert "DimDate[Year]" in text and "DimDate[Date]" in text
+
+
+def test_agent_sends_today_with_the_question():
+    from src.structured_agent import StructuredPlanningAgent
+
+    seen = {}
+
+    def generate(model, question, instructions):
+        seen["instructions"] = instructions
+        return '{"clarification": {"reason": "ambiguous", "message": "?"}}'
+
+    agent = StructuredPlanningAgent(powerbi=object(), generate=generate,
+                                    chat=lambda m, msgs: "",
+                                    options={"answerability_check": False})
+    try:
+        agent.plan("Cost by product for the last two years", {"stages": [],
+                                                              "trace_id": "t"})
+    except ValueError:
+        pass
+    assert "TODAY:" in seen["instructions"]

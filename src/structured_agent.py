@@ -161,6 +161,15 @@ DEFAULT_OPTIONS = {
     # before planning (src/interpret.py), merge "compare A and B" filters
     # into a breakdown, and offer a rephrased question when declining.
     "interpret_wording": True,
+    # Step 1 (added 2026-11-19, not yet measured): the model reads the
+    # question as plain English into an explicit business request before
+    # planning (src/understand.py). Declines only requests to change data
+    # and messages unrelated to the data; replaces the wording rules, the
+    # measure-name check and the answerability gate while on.
+    "understand": True,
+    # A general language model reads plain English better than the coding
+    # planner model (live check 2026-11-19); empty = the planner model.
+    "understand_model": "qwen2.5:7b-instruct",
     "max_table_rows": MAX_TABLE_ROWS,
     # Add a chart of the answer to the embedded report (off unless the app
     # asks for it; the query path is identical either way).
@@ -217,17 +226,21 @@ class StructuredPlanningAgent:
         ``original``: the user's own wording, screened too (the wording
         fixes once turned "Update ..." into "date ...", APP2-027)."""
 
+        understood = self.options["understand"]
         blocked = None
         if self.options["request_guard"]:
+            # Requests to change data are always refused (read-only). With
+            # the understanding step, "outside the data" is its own judgement.
             blocked = (screen_request(original or question) or screen_request(question)
-                       or screen_outside_data(original or question))
+                       or (None if understood
+                           else screen_outside_data(original or question)))
         if blocked is not None:
             trace["stages"].append("request_guard:blocked")
             detail = blocked["clarification"]
             return {"kind": "clarification", "reason": detail["reason"],
                     "message": detail["message"]}
 
-        if self.options["measure_name_check"]:
+        if self.options["measure_name_check"] and not understood:
             missing = unmatched_measure_phrases(question)
             if missing:
                 trace["stages"].append("measure_name:missing")
@@ -241,7 +254,12 @@ class StructuredPlanningAgent:
                         "message": unmatched_measure_message(missing),
                         "suggestions": suggestions}
 
-        raw = self.generate(self.model, question, self.instructions)
+        instructions = self.instructions
+        if self.options["interpret_wording"]:
+            from src.interpret import planner_context
+
+            instructions += planner_context()
+        raw = self.generate(self.model, question, instructions)
         trace["stages"].append("planner")
         raw = self._fix_column_measures(raw, trace)
         try:
@@ -254,7 +272,7 @@ class StructuredPlanningAgent:
             LOGGER.info("[%s] plan rejected, repairing: %s",
                         trace["trace_id"], first_error)
             messages = [
-                {"role": "system", "content": self.instructions},
+                {"role": "system", "content": instructions},
                 {"role": "user", "content": question},
                 {"role": "assistant", "content": raw},
                 {"role": "user", "content": REPAIR_INSTRUCTION_V6.format(
@@ -264,7 +282,32 @@ class StructuredPlanningAgent:
             trace["stages"].append("repair")
             response = self._parse(self._fix_column_measures(repaired, trace))
 
-        if response["kind"] == "plan" and self.options["answerability_check"]:
+        if understood and response["kind"] == "clarification":
+            # The request was already read and made explicit: plan it with
+            # the closest measures and columns instead of declining.
+            messages = [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": json.dumps(
+                    {"clarification": {"reason": response["reason"],
+                                       "message": response["message"]}})},
+                {"role": "user", "content": (
+                    "Do not ask for clarification. This request was already "
+                    "interpreted; return a query plan for it, using the "
+                    "closest measures, columns and values in the model.")},
+            ]
+            try:
+                retried = self._parse(self._fix_column_measures(
+                    self.chat(self.model, messages), trace))
+                if retried["kind"] == "plan":
+                    response = retried
+                    trace["stages"].append("plan_instead_of_clarification")
+            except ValueError as exc:
+                trace["stages"].append("plan_retry_invalid")
+                trace["retry_error"] = str(exc)[:300]
+
+        if (response["kind"] == "plan" and self.options["answerability_check"]
+                and not understood):
             result = gate(
                 question, response["plan"], self.verifier_chat,
                 self.verifier_model, vocabulary=self._gate_vocabulary(),
@@ -360,22 +403,60 @@ class StructuredPlanningAgent:
         # out before planning: it is about the picture, not the data.
         preferred_chart = None
         planning_question = question
-        if self.options["create_visuals"]:
+        read_as = []
+        spec = None
+        understood = None
+        if self.options["understand"] and not (
+                self.options["request_guard"] and screen_request(question)):
+            # Step 1: the model reads the question as plain English and
+            # writes an explicit business request (src/understand.py).
+            from src.understand import readable, understand
+
+            try:
+                understood = understand(
+                    question, self.chat,
+                    self.options.get("understand_model") or self.model)
+            except Exception as exc:  # the question is planned as written
+                trace["stages"].append("understand_failed")
+                trace["understand_error"] = str(exc)[:300]
+                LOGGER.info("[%s] understanding failed: %s",
+                            trace["trace_id"], exc)
+            if understood is not None:
+                trace["stages"].append("understood")
+                trace["understood"] = understood["request"]
+                if understood["out_of_scope"]:
+                    trace["stages"].append("out_of_scope")
+                    self.last_result = {"kind": "declined",
+                                        "reason": "out_of_scope"}
+                    return ("This doesn't seem to be about the sales data, so "
+                            "I didn't run a query. Ask about sales, profit, "
+                            "stores, products, customers or dates.\n\n"
+                            f"_No query was executed. Trace: "
+                            f"`{trace['trace_id']}`_")
+                planning_question = understood["request"]
+                spec = understood["spec"]
+                if spec:
+                    trace["analysis"] = sorted(spec)
+                if self.options["create_visuals"] and understood["chart"]:
+                    preferred_chart = understood["chart"]
+                    trace["chart_requested"] = preferred_chart
+                read_as = [f'the question as "{readable(planning_question)}"',
+                           *understood["assumptions"]]
+
+        if self.options["create_visuals"] and understood is None:
             from src.visual_builder import chart_preference
 
             preferred_chart, planning_question = chart_preference(question)
             if preferred_chart:
                 trace["chart_requested"] = preferred_chart
 
-        read_as = []
-        if self.options["interpret_wording"]:
+        if self.options["interpret_wording"] and understood is None:
             from src.interpret import interpret
 
             planning_question, read_as = interpret(planning_question)
         # Growth, share and holiday periods are computed around the plan
         # (src/analysis.py), so their words are taken out before planning.
-        spec = None
-        if self.options["interpret_wording"] and not (
+        if self.options["interpret_wording"] and understood is None and not (
                 self.options["request_guard"] and screen_request(question)):
             from src.analysis import detect
 
@@ -428,7 +509,8 @@ class StructuredPlanningAgent:
             from evaluation.query_plan_validator import validate_query_plan
             from src.interpret import normalize_plan
 
-            fixed, plan_notes = normalize_plan(plan, question)
+            fixed, plan_notes = normalize_plan(
+                plan, planning_question if understood else question)
             if spec and (spec.get("period") or spec.get("growth")):
                 # Their own date handling replaces the month rules.
                 plan_notes = [n for n in plan_notes
