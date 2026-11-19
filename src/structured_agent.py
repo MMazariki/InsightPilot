@@ -37,7 +37,7 @@ from evaluation.ollama_query_plan_adapter import (
 )
 from evaluation.planner_response import parse_planner_response
 from evaluation.query_plan_compiler import compile_query_plan
-from evaluation.request_guard import screen_request
+from evaluation.request_guard import screen_outside_data, screen_request
 from evaluation.run_fresh_evaluation import REPAIR_INSTRUCTION_V6
 
 LOGGER = logging.getLogger("insightpilot.structured_agent")
@@ -219,7 +219,8 @@ class StructuredPlanningAgent:
 
         blocked = None
         if self.options["request_guard"]:
-            blocked = screen_request(original or question) or screen_request(question)
+            blocked = (screen_request(original or question) or screen_request(question)
+                       or screen_outside_data(original or question))
         if blocked is not None:
             trace["stages"].append("request_guard:blocked")
             detail = blocked["clarification"]
@@ -409,6 +410,10 @@ class StructuredPlanningAgent:
                 offer = ("Did you mean: " + " or ".join(
                     f"**{s}**" for s in self.suggestions) + "?\n\n")
             self.last_result = {"kind": "declined", "reason": response["reason"]}
+            # A request refused before planning was not read as a question:
+            # no "Read ... as ..." line.
+            if "request_guard:blocked" in trace["stages"]:
+                read_note = ""
             return (
                 f"{read_note}{response['message']}\n\n{offer}"
                 f"_No query was executed. Trace: `{trace['trace_id']}`_"

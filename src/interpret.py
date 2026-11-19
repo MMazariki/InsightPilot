@@ -69,7 +69,7 @@ SYNONYMS = [
     # Before the "vs" and "day of week" rules.
     (rf"(?:on |for |during )?{_WEEK_PART}\s+(?:vs\.?|versus|and|or|against|"
      rf"compared (?:to|with))\s+(?:on |for )?{_WEEK_PART}",
-     "by IsWeekend", '"weekends vs weekdays" as the weekend flag (IsWeekend)'),
+     "by is weekend", '"weekends vs weekdays" as the weekend flag (IsWeekend)'),
     # Customers who bought are counted in the sales table (APP2-020).
     (r"(?:how many|number of|count of|total number of)\s+(?:different |distinct |"
      r"unique |individual )?customers?(?:\s+(?:bought|shopped|purchased|ordered|"
@@ -209,7 +209,11 @@ def _vocabulary():
         _VOCABULARY = build_vocabulary() | NEUTRAL_WORDS | set(WRITE_VERBS) | {
             "revenue", "turnover", "income", "earnings", "branch", "shop",
             "outlet", "money", "pieces", "profitability", "period", "client",
-            "weekday", "weekdays", "weekend", "weekends", "performance"}
+            "weekday", "weekdays", "weekend", "weekends", "performance",
+            # outside-data words stay as written, so the guard sees them
+            # ("market" became "make", APP3-019)
+            "market", "markets", "competitor", "competitors", "competition",
+            "industry", "benchmark", "benchmarks", "rival", "rivals"}
     return _VOCABULARY
 
 
@@ -255,6 +259,11 @@ def interpret(question, today=None):
             notes += [label] if label else [
                 f'"{c}" as {_pluralise(replacement, c)}' for c in changed]
 
+    # "Weekend versus weekday gross profit" -> "gross profit by is weekend":
+    # the breakdown after the measure, as in every other question (APP3-004
+    # was declined with the breakdown first).
+    text = re.sub(r"^\s*by is weekend\s*[:,-]?\s+(.+)$", r"\1 by is weekend", text,
+                  flags=re.I)
     text = re.sub(r"\bnet sales sales\b", "net sales", text, flags=re.I)
     text = re.sub(r"\bnet net sales\b", "net sales", text, flags=re.I)
     text = _PER_GROUP.sub("by ", text)

@@ -54,9 +54,9 @@ def test_typo_fixer_leaves_write_verbs_alone():
 
 
 @pytest.mark.parametrize("question,expected", [
-    ("Net sales on weekends vs weekdays", "Net sales by IsWeekend"),
-    ("Units sold on weekdays and weekends", "Units sold by IsWeekend"),
-    ("Weekend versus weekday gross profit", "By IsWeekend gross profit"),
+    ("Net sales on weekends vs weekdays", "Net sales by is weekend"),
+    ("Units sold on weekdays and weekends", "Units sold by is weekend"),
+    ("Weekend versus weekday gross profit", "Gross profit by is weekend"),
 ])
 def test_weekends_against_weekdays_is_the_weekend_flag(question, expected):
     assert interpret(question, TODAY)[0] == expected
@@ -93,3 +93,30 @@ def test_share_of_a_distinct_count_uses_counted_totals():
     # Net sales add up: no counted totals needed.
     assert not analysis.needs_counted_totals({"metrics": [{"alias": "N", "expression": {
         "kind": "measure", "name": "Net Sales"}}]})
+
+
+@pytest.mark.parametrize("question", [
+    "What is our market share in Saudi Arabia?",
+    "How do we compare with our competitors?",
+    "Industry average gross margin",
+    "Market size for snacks in Riyadh",
+])
+def test_outside_data_is_declined(question):
+    from evaluation.request_guard import screen_outside_data
+
+    assert screen_outside_data(question)["clarification"]["reason"] == "out_of_scope"
+
+
+@pytest.mark.parametrize("question", [
+    "Snacks share of net sales by region",
+    "Share of units sold by store type",
+    "Net sales by supermarket store type",
+])
+def test_own_shares_are_not_outside_data(question):
+    from evaluation.request_guard import screen_outside_data
+
+    assert screen_outside_data(question) is None
+
+
+def test_market_is_not_corrected_to_make():
+    assert "market" in interpret("What is our market share?", TODAY)[0].lower()

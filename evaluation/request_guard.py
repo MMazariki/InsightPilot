@@ -51,6 +51,40 @@ WRITE_PATTERN = re.compile(
 )
 
 
+# Questions that need data from outside the company's sales model: the
+# market, competitors, industry figures (APP3-019: "market share" was
+# answered as a share of the company's own net sales). Added 2026-11-19.
+OUTSIDE_DATA = re.compile(
+    r"\bmarket\s+(?:share|size|sizes|growth|position|leaders?|value|potential|"
+    r"penetration|trends?)\b|\bmarket\b(?=.*\b(?:compare|versus|vs)\b)|"
+    r"\bcompetitors?\b|\bcompetition\b|\brivals?\b|"
+    r"\bindustry\s+(?:average|averages|benchmarks?|standards?|norms?|growth|"
+    r"figures?|data|margin)\b|\bbenchmarks?\b|"
+    r"\b(?:population|gdp|inflation|weather|footfall)\b",
+    re.IGNORECASE)
+
+
+def screen_outside_data(question):
+    """A clarification dict for questions that need outside data, else ``None``."""
+
+    if not isinstance(question, str):
+        raise TypeError("Question must be a string")
+    match = OUTSIDE_DATA.search(question)
+    if match is None:
+        return None
+    return {
+        "clarification": {
+            "reason": "out_of_scope",
+            "message": (
+                f"Answering this needs data from outside the company's sales model "
+                f"(\"{match.group(0).strip()}\": market, competitor or industry "
+                "figures). InsightPilot only has the company's own sales, targets, "
+                "products, stores and customers."
+            ),
+        }
+    }
+
+
 def screen_request(question):
     """Return a clarification dict for write-style requests, else ``None``."""
 
