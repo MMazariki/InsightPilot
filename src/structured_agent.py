@@ -300,11 +300,14 @@ class StructuredPlanningAgent:
 
         if not self.options["interpret_wording"]:
             return raw
-        from src.interpret import fix_column_measures
+        from src.interpret import fix_column_measures, fix_single_value_groups
 
         raw, replaced = fix_column_measures(raw)
         if replaced:
             trace["stages"].append("column_measure:" + ",".join(replaced))
+        raw, dropped = fix_single_value_groups(raw)
+        if dropped:
+            trace["stages"].append("single_value_group:" + ",".join(dropped))
         return raw
 
     def _gate_vocabulary(self):

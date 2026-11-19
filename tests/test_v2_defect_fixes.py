@@ -118,5 +118,52 @@ def test_own_shares_are_not_outside_data(question):
     assert screen_outside_data(question) is None
 
 
+def test_group_on_a_single_filtered_value_is_dropped():
+    import json
+
+    from src.interpret import fix_single_value_groups
+
+    raw = json.dumps({
+        "metrics": [{"alias": "Gross Sales", "expression": {"kind": "measure",
+                                                              "name": "Gross Sales"}}],
+        "group_by": [{"table": "FactSales", "column": "Channel"},
+                     {"table": "DimDate", "column": "Year"}],
+        "filters": [{"type": "column", "table": "DimDate", "column": "Year",
+                     "operator": "eq", "value": 2026},
+                    {"type": "column", "table": "DimDate", "column": "MonthNumber",
+                     "operator": "eq", "value": 10}],
+        "order_by": [{"field": "DimDate[Year]", "direction": "asc"}], "limit": None})
+    fixed, dropped = fix_single_value_groups(raw)
+    plan = json.loads(fixed)
+    assert dropped == ["DimDate[Year]"]
+    assert plan["group_by"] == [{"table": "FactSales", "column": "Channel"}]
+    assert plan["order_by"] == [] and len(plan["filters"]) == 2
+    # Two values compared: kept for the comparison fix.
+    two = json.loads(raw)
+    two["filters"].append({"type": "column", "table": "DimDate", "column": "Year",
+                           "operator": "eq", "value": 2025})
+    assert fix_single_value_groups(json.dumps(two))[1] == []
+    assert fix_single_value_groups('{"clarification": {}}')[1] == []
+    assert fix_single_value_groups("not json") == ("not json", [])
+
+
+@pytest.mark.parametrize("question,dropped", [
+    ("Net sales on weekends in 2026", True),
+    ("Gross profit at weekends in 2025", True),
+    ("Net sales by weekday", False),
+    ("Which weekday had the highest gross profit?", False),
+    ("Net sales by day of the week", False),
+])
+def test_on_weekends_is_a_filter_not_a_day_breakdown(question, dropped):
+    from src.interpret import normalize_plan
+
+    plan = {"metrics": [{"alias": "Net Sales", "expression": {"kind": "measure",
+                                                              "name": "Net Sales"}}],
+            "group_by": [{"table": "DimDate", "column": "DayName"}],
+            "filters": [], "order_by": [], "limit": None}
+    fixed, _ = normalize_plan(plan, question)
+    assert (fixed["group_by"] == []) == dropped
+
+
 def test_market_is_not_corrected_to_make():
     assert "market" in interpret("What is our market share?", TODAY)[0].lower()

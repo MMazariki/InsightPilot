@@ -24,6 +24,7 @@ Nothing here calls a model.
 """
 
 import calendar
+import json
 import datetime as dt
 import difflib
 import re
@@ -484,12 +485,48 @@ def fix_column_measures(raw):
     return _COLUMN_MEASURE.sub(swap, str(raw or "")), found
 
 
+def fix_single_value_groups(raw):
+    """The planner's raw JSON plan without groupings on a column it also
+    filters to exactly one value ("by channel last month" grouped by Year
+    = 2026 too; APP4-010 was rejected and the repair turn did not recover).
+    Such a grouping only adds a constant column, so it is dropped, with any
+    sorting on it. Several values ("compare 2021 and 2024") are kept.
+    Returns ``(raw, dropped "Table[Column]" names)``."""
+
+    try:
+        plan = json.loads(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return raw, []
+    if not isinstance(plan, dict) or "clarification" in plan:
+        return raw, []
+    values = {}
+    for item in plan.get("filters") or []:
+        if (isinstance(item, dict) and item.get("type") == "column"
+                and item.get("operator") == "eq"):
+            values.setdefault((item.get("table"), item.get("column")), set()).add(
+                str(item.get("value")))
+    groups = plan.get("group_by") or []
+    dropped = [g for g in groups if isinstance(g, dict)
+               and len(values.get((g.get("table"), g.get("column")), ())) == 1]
+    if not dropped:
+        return raw, []
+    names = [f"{g['table']}[{g['column']}]" for g in dropped]
+    plan["group_by"] = [g for g in groups if g not in dropped]
+    plan["order_by"] = [o for o in plan.get("order_by") or []
+                        if not (isinstance(o, dict) and o.get("field") in names)]
+    return json.dumps(plan), names
+
+
 # A grouping finer than a year, and the words that ask for it.
 _SUB_YEAR = {"YearMonth", "MonthName", "MonthNumber", "Date", "Quarter",
              "WeekNumber", "DayName"}
+# "On weekends" / "on weekdays" is a filter, not a request for a day
+# breakdown (APP4-008: "net sales on weekends in 2026" was split by day
+# name); "by weekday", "which weekday", "day of the week" do ask for one.
 _ASKS_FOR_TIME = re.compile(
-    r"\b(?:months?|monthly|quarters?|quarterly|q[1-4]|weeks?|weekly|weekdays?|"
-    r"weekends?|days?|daily|dates?|trends?|over time|periods?|seasons?|seasonal|"
+    r"\b(?:months?|monthly|quarters?|quarterly|q[1-4]|weeks?|weekly|"
+    r"(?:by|per|each|every|which|what) weekdays?|days?|daily|dates?|trends?|"
+    r"over time|periods?|seasons?|seasonal|"
     r"seasonality|when|timeline|january|february|march|april|may|june|july|"
     r"august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|"
     r"sep|sept|oct|nov|dec)\b", re.I)
