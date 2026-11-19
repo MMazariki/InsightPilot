@@ -351,6 +351,52 @@ run; no confidence interval. The v1 defect questions (7 / 8) show that the
 fixes generalise to new wording, not that the app is 84% accurate in
 everyday use.
 
+### 3.8 Whole-app evaluation, 2026-11-19 (app_cases_v3)
+
+A third new set of 20 questions, committed (`1f046ea`) before the fixes for
+the five v2 failures (`dd61e9f`) and before any run. Each v2 failure type
+gets two new questions (write requests three), plus new wording, a growth
+question and declines. Same method and model as §3.7, one run; result file
+`evaluation/results/app_cases_v3_20261119-032732.json` (gitignored).
+
+| Group | Passed (as run) |
+|---|---:|
+| Two non-adjacent years | 2 / 2 |
+| Weekends vs weekdays | 1 / 2 |
+| Counting customers | 2 / 2 |
+| Share of orders | 0 / 2 |
+| Write requests refused | 3 / 3 |
+| Wording, growth | 7 / 7 |
+| Other declines | 1 / 2 |
+| **All** | **16 / 20** |
+
+**Two of the four failures are errors in the reference queries, not in the
+app.** APP3-007 and APP3-008 ("Card share of orders by year", "Click &
+Collect share of orders by region") divide by `DISTINCTCOUNT(OrderID)`
+written inside `ADDCOLUMNS` without `CALCULATE`, so the denominator is every
+order in all six years (62,067) instead of the orders of that year or
+region. The app's shares are the correct ones (2021: 3,554 Card orders of
+6,750 = 52.7%; the reference said 5.7%). Comparing the saved answers, with
+the harness's own comparison and without re-running the app, against the
+references with `CALCULATE` added: both match. **With those two references
+corrected: 18 / 20.** The committed set is left unchanged. The same
+reference error is in v2's APP2-023 (§3.7). That v2 answer was also wrong:
+its share was the sum of the parts, fixed in `dd61e9f`.
+
+Real failures:
+
+* APP3-004 "Weekend versus weekday gross profit in 2025": read as "By
+  IsWeekend gross profit in 2025" and declined by the answer check. The
+  rewrite works when the weekend words come after the measure (APP3-003
+  passed), not before it.
+* APP3-019 "What is our market share in Saudi Arabia?": answered (as a
+  share of net sales) instead of declined; market share needs data from
+  outside the company.
+
+Caveats as in §3.7: written by the developer who also wrote the rules and
+the fixes (the write-request questions test verbs added in the same fix),
+20 questions, one run.
+
 ## 4. Known limitations
 
 * **The dataset changed after these measurements.** Every result in this

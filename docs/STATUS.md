@@ -31,7 +31,13 @@ its settings moved to Admin).
 
 ## Open items
 
-0. **2026-11-19: the four v1 failures were fixed** (two-year comparison,
+0. **2026-11-19 (later): the five v2 failures were fixed** and a third new
+   set, app_cases_v3, scored **16 / 20 as run, 18 / 20 after correcting two
+   wrong reference queries** (the app's share-of-orders answers were right;
+   `docs/EVALUATION.md` §3.8). Open: "weekend versus weekday gross profit"
+   (weekend words before the measure) is declined; "market share" is
+   answered instead of declined.
+   **Earlier the same day: the four v1 failures were fixed** (two-year comparison,
    unasked month grouping, "discounts given", target column) and a **new
    set, app_cases_v2, scored 26 / 31** (answerable 21 / 25, declines 5 / 6;
    `docs/EVALUATION.md` §3.7). New known defects from it: comparing two
