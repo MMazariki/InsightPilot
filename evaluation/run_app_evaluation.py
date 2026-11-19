@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -184,7 +185,10 @@ def run(set_path):
     if out.exists():
         raise SystemExit(f"{out} exists; not overwritten.")
     out.write_text(json.dumps({
-        "set": str(Path(set_path).relative_to(ROOT)),
+        # relpath, not relative_to: a relative --set path (and Windows
+        # drive-letter case) made the 2026-11-19 v2 run fail here, after
+        # all questions had run.
+        "set": os.path.relpath(Path(set_path).resolve(), ROOT),
         "as_of": case_set["as_of"],
         "run_at": dt.datetime.now().isoformat(timespec="seconds"),
         "planner_model": settings["planner"]["model"],
@@ -194,7 +198,7 @@ def run(set_path):
         "results": results,
     }, indent=2, default=str), encoding="utf-8")
     print("\n" + json.dumps(summary, indent=1))
-    print(f"Written: {out.relative_to(ROOT)}")
+    print(f"Written: {os.path.relpath(out, ROOT)}")
     return summary
 
 

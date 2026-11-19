@@ -31,6 +31,14 @@ its settings moved to Admin).
 
 ## Open items
 
+0. **2026-11-19: the four v1 failures were fixed** (two-year comparison,
+   unasked month grouping, "discounts given", target column) and a **new
+   set, app_cases_v2, scored 26 / 31** (answerable 21 / 25, declines 5 / 6;
+   `docs/EVALUATION.md` §3.7). New known defects from it: comparing two
+   non-adjacent years can be rejected before the fix applies; "weekends vs
+   weekdays" adds a row; "how many customers bought" is declined; "In-Store
+   share of orders" differs; "update the sales target to 50000" is
+   answered (read-only) instead of declined.
 1. **Accuracy measured on the current setup (2026-11-17, one run each,
    developer-written sets; `docs/EVALUATION.md` §3.4-3.5).** Power BI
    assistant: 29 / 33 (answerable 23 / 27, declines 6 / 6). Documents page:

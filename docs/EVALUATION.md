@@ -1,6 +1,6 @@
 # InsightPilot — Structured Planning Evaluation
 
-Last updated: 2026-11-17 (§3.4 whole app, §3.5 Documents page). All numbers below were measured by executing
+Last updated: 2026-11-19 (§3.7 whole app, new set). Earlier: 2026-11-17 (§3.4 whole app, §3.5 Documents page). All numbers below were measured by executing
 compiled DAX read-only against the Power BI semantic model and comparing with
 captured reference results. Models ran locally via Ollama
 (`qwen2.5-coder:3b`, `qwen2.5-coder:7b`, Q4_K_M, temperature 0,
@@ -303,6 +303,53 @@ that the rules do not know (for example "loop in Sara", "ping the finance
 team") are not recognised and are answered as questions. Real sends to
 Outlook, Teams and To Do have not been made yet (they need the one-time
 setup in `docs/AGENT_ACTIONS_PLAN.md` §6).
+
+### 3.7 Whole-app evaluation, 2026-11-19 (app_cases_v2)
+
+The same method as §3.4 on a **new set of 31 questions**, none repeated from
+v1. The set was committed (`de9454f`) before the fixes for the four v1
+failures (`cd03084`) and before any run. The four v1 defect types get two
+new questions each; the rest is new wording (unit price, average selling
+price, quarterly, top 3, weekends), analysis periods and declines. "Today"
+fixed to 2026-11-19, model `qwen2.5-coder:7b`, app settings as shipped, one
+run.
+
+| Group | Passed |
+|---|---:|
+| The four v1 defect types (compare two years, unasked month grouping, "given/granted/offered", target column) | 7 / 8 |
+| Wording | 11 / 13 |
+| Analysis (growth, share, Eid, National Day) | 3 / 4 |
+| Should decline | 5 / 6 |
+| **All** | **26 / 31** (answerable 21 / 25) |
+
+Failures, as the run showed them (not fixed against this set; a fix needs a
+new set to be measured):
+
+* APP2-002 "Compare units sold in 2021 and 2024": the plan was rejected
+  ("Invalid sorting field: DimDate[Year]"): the planner sorted by Year
+  without grouping by it, and the app's two-year fix runs only after a plan
+  passes that check.
+* APP2-015 "Net sales on weekends vs weekdays": 3 rows instead of 2.
+* APP2-020 "How many customers bought something in 2025?": declined
+  (over-refusal).
+* APP2-023 "In-Store share of orders by year": no row matched the
+  reference (the share or the order count was computed differently).
+* APP2-027 "Update the sales target for Riyadh Mall 1 to 50000": answered
+  with a read-only query instead of being declined. Nothing can be written
+  (queries are read-only), but the request should have been refused; the
+  request guard does not know "update ... to".
+
+The harness crashed while writing the result file, after every question had
+run (a relative `--set` path; fixed afterwards). The scores above are from
+that run's printed log, kept as
+`evaluation/results/app_cases_v2_20261119-run1-log.txt` (gitignored). It
+was not re-run.
+
+Caveats: 31 questions, written by the developer who also wrote the rules
+and the fixes, so the set still leans towards wording the rules know; one
+run; no confidence interval. The v1 defect questions (7 / 8) show that the
+fixes generalise to new wording, not that the app is 84% accurate in
+everyday use.
 
 ## 4. Known limitations
 
